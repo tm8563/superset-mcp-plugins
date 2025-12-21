@@ -329,4 +329,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Authors
 
-Maintained by [Ponder](https://github.com/ponderedw)
+Maintained by [Ponder](https://github.com/ponderedw/superset-mcp-plugins)
