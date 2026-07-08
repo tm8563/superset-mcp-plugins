@@ -255,19 +255,6 @@ async function sendMessage(event) {
             const lines = buffer.split('\n');
             buffer = lines.pop();
             
-            const pendingTools = [];
-            let assistantText = '';
-            let currentTextDiv = null;
-
-            function ensureTextRun() {
-                if (!currentTextDiv) {
-                    currentTextDiv = document.createElement('div');
-                    currentTextDiv.className = 'text-run';
-                    assistantContentDiv.appendChild(currentTextDiv);
-                    assistantText = '';
-                }
-            }
-
             let textBuffer = '';
             let textRunDiv = null;
             const pendingTools = [];
