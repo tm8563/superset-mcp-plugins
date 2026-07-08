@@ -125,6 +125,26 @@ def _install():
     httpx = FakeHttpx()
     sys.modules['httpx'] = httpx
 
+    # httpx connection-level exception classes used by the Ollama fallback
+    # (ollama_model._CONNECT_ERRORS). Subclass Exception so they're catchable.
+    class ConnectError(Exception):
+        pass
+
+    class ConnectTimeout(Exception):
+        pass
+
+    class RemoteProtocolError(Exception):
+        pass
+
+    class PoolTimeout(Exception):
+        pass
+
+    httpx.ConnectError = ConnectError
+    httpx.ConnectTimeout = ConnectTimeout
+    httpx.RemoteProtocolError = RemoteProtocolError
+    httpx.PoolTimeout = PoolTimeout
+    sys.modules['stubs']._ConnectError = ConnectError
+
     # pydantic
     pydantic = types.ModuleType('pydantic')
     pydantic.BaseModel = BaseModel
@@ -154,12 +174,48 @@ def _install():
     reg_path('langchain_community.graphs', FalkorDBGraph=_dummy)
     reg_path('langchain_mcp_adapters.client', MultiServerMCPClient=_dummy)
 
-    # LLM provider base classes (inference wrappers subclass these)
+    # LLM provider base classes (inference wrappers subclass these). The
+    # Ollama base is controllable so the cloud->local fallback (roadmap #20)
+    # can be exercised: add a base_url to _fail_urls to make its _invoke/
+    # _stream raise a ConnectError; set _mid_fail_url to yield one chunk then
+    # raise (mid-stream drop, must NOT fall back).
     class _ChatBase:
         last_kwargs = None
+        _fail_urls = set()
+        _mid_fail_url = None
 
         def __init__(self, **kwargs):
             _ChatBase.last_kwargs = kwargs
+            self.base_url = kwargs.get('base_url')
+
+        def _invoke(self, *a, **k):
+            if self.base_url in _ChatBase._fail_urls:
+                raise httpx.ConnectError('primary unreachable')
+            return f'OK:{self.base_url}'
+
+        async def _ainvoke(self, *a, **k):
+            if self.base_url in _ChatBase._fail_urls:
+                raise httpx.ConnectError('primary unreachable')
+            return f'OK:{self.base_url}'
+
+        def _stream(self, *a, **k):
+            if self.base_url == _ChatBase._mid_fail_url:
+                yield 'c1'
+                raise httpx.ConnectError('mid-stream drop')
+            if self.base_url in _ChatBase._fail_urls:
+                raise httpx.ConnectError('primary unreachable')
+            yield 'c1'
+            yield 'c2'
+
+        async def _astream(self, *a, **k):
+            if self.base_url == _ChatBase._mid_fail_url:
+                yield 'c1'
+                raise httpx.ConnectError('mid-stream drop')
+            if self.base_url in _ChatBase._fail_urls:
+                raise httpx.ConnectError('primary unreachable')
+            yield 'c1'
+            yield 'c2'
+
     reg_path('langchain_anthropic', ChatAnthropic=_ChatBase)
     reg_path('langchain_openai', ChatOpenAI=_ChatBase)
     reg_path('langchain_aws', ChatBedrock=_ChatBase)
