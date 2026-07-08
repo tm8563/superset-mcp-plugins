@@ -30,7 +30,7 @@ records completion status. Read ROADMAP.md for what each numbered item is.
 - [x] 19
 - [x] 20
 - [x] 21
-- [ ] 22
+- [x] 22
 - [ ] 23
 
 ## Config reconciliation (2026-07-08)
