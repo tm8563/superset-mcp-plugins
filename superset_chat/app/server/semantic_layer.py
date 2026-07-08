@@ -126,6 +126,16 @@ class SupersetRestClient:
         response.raise_for_status()
         return response.json()
 
+    def get_bytes(self, path: str) -> bytes:
+        """GET a path and return the raw response body (for binary endpoints
+        like screenshots/PNGs)."""
+        if not self._api_key and self._token is None:
+            self._login()
+        url = path if path.startswith('http') else f'{self._base}{path}'
+        response = httpx.get(url, headers=self._headers(), timeout=30)
+        response.raise_for_status()
+        return response.content
+
     def put(self, path: str, json_body: dict) -> dict:
         if not self._api_key and self._token is None:
             self._login()

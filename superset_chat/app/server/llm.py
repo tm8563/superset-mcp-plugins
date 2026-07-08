@@ -18,6 +18,7 @@ from .embedding import EmbeddingTools
 from .reports import ReportTools
 from .governance import GovernanceTools
 from .ml_analytics import MLTools
+from .pdf_reports import PdfReportTools
 
 import atexit
 import json
@@ -429,7 +430,8 @@ async def get_stream_agent_responce(session_id, message,
     )
     mcp_tools = await _mcp_pool.get_tools(mcps)
     tools = (mcp_tools + [datetime_tool, SemanticLayerMetadataTool]
-             + EmbeddingTools + ReportTools + GovernanceTools + MLTools)
+             + EmbeddingTools + ReportTools + GovernanceTools + MLTools
+             + PdfReportTools)
 
     dbt_prompt = '''Don't use this tool to receieve charts/dashboards/Superset/datasets/datasource metadata. This graph doesn't know anything about them. Find real database name from Superset MCP.
     The database schema includes:

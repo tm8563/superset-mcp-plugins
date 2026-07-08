@@ -31,7 +31,7 @@ records completion status. Read ROADMAP.md for what each numbered item is.
 - [x] 20
 - [x] 21
 - [x] 22
-- [ ] 23
+- [x] 23
 
 ## Config reconciliation (2026-07-08)
 
@@ -101,6 +101,52 @@ Verified: 11 behavioral checks (streamable_http -> /mcp + Bearer; SUPERSET_API_K
 preferred over MCP_TOKEN; MCP_SERVICE_URL override; sse -> /sse; stdio default +
 env intact; no-token -> empty headers); full suite 85 tests pass; `docker compose
 config` valid. Live reachability confirmed via `docker exec` probe.
+
+## #23 investigation — best-effort PDF reporting (2026-07-08)
+
+Investigated Superset's EXISTING screenshot/PDF machinery in
+/home/mlfts/superset before building anything (per the #23 guidance):
+- REST: `POST /api/v1/dashboard/<id>/cache_dashboard_screenshot/` (trigger),
+  `GET /api/v1/dashboard/<id>/screenshot/<digest>/` (PNG fetch), and the
+  chart equivalents `GET /api/v1/chart/<id>/cache_screenshot/` +
+  `GET /api/v1/chart/<id>/screenshot/<digest>/` (confirmed in the openapi +
+  dashboards/api.py + charts/api.py). `digest = get_dashboard_digest(dashboard)`.
+- Server-side PDF: `superset/utils/pdf.py:build_pdf_from_screenshots` builds
+  paginated PDFs inside the reports worker (delivered via email/Slack, NOT a
+  downloadable REST endpoint); reached via the #15 `ExecuteReport` tool.
+- Celery worker: `superset/tasks/thumbnails.py` (`cache_dashboard_screenshot`,
+  `cache_chart_thumbnail`) via Playwright. charts/api.py gates screenshot
+  endpoints behind `ensure_thumbnails_enabled`.
+- Live instance: `ENABLE_PLAYWRIGHT=false` -> the screenshot endpoints return
+  404 (confirmed: `POST .../cache_dashboard_screenshot/` -> 404,
+  `GET .../screenshot/digest/` -> 404). So no screenshot can be produced on
+  the real dev instance until Playwright is enabled.
+
+Implementation (wraps the existing machinery, no new renderer):
+- `pdf_reports.py`: `trigger_dashboard_screenshot` / `get_dashboard_screenshot`
+  / `trigger_chart_screenshot` / `get_chart_screenshot` (raw PNG bytes via a
+  new `SupersetRestClient.get_bytes`), `screenshot_to_pdf` (BEST-EFFORT
+  single-page PNG->PDF via reportlab if installed, else None), and
+  `export_dashboard_pdf` (fetch + best-effort PDF, PNG fallback, writes a file
+  + returns a gap note). `PdfReportTools` (TriggerDashboardScreenshot,
+  TriggerChartScreenshot, ExportDashboardPdf) wired into the ReAct agent.
+
+GAP vs QuickSight paginated reports (documented honestly, not overclaimed):
+- No pixel-perfect multi-page layout control (header/footer, page breaks,
+  repeating table headers). Client-side path is a single image-in-PDF.
+- No bursting (per-recipient segmented output).
+- No scheduled batch PDF generation from the plugin; Superset's scheduled
+  reports + `build_pdf_from_screenshots` are the server-side equivalent
+  (reached via #15 ExecuteReport), not a new renderer here.
+- Requires Superset's Playwright worker enabled to produce any output; else
+  the screenshot endpoints 404.
+
+Verified: 12 behavioral checks (trigger/fetch paths incl. trailing slash;
+get_bytes PNG; best-effort PDF None on no-reportlab/invalid; PNG fallback +
+gap note; tool wrappers); integration — the agent's tools include the 3 PDF
+tools. Added tests/test_pdf_reports.py (8 tests); full suite 118 tests pass.
+Live: endpoint paths confirmed in the openapi + source; the live dev instance
+404s because Playwright is off (documented, not a plugin bug).
 
 ## BLOCKED
 (none yet — log any credential/ambiguity blockers here with date and item #)
