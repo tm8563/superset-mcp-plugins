@@ -4,6 +4,39 @@ Checkbox tracker for `.claude/ROADMAP.md`. The spec lives in
 `CLAUDE.md` (rules) and `.claude/ROADMAP.md` (items) — this file only
 records completion status. Read ROADMAP.md for what each numbered item is.
 
+## Closing summary — ALL THREE PHASES COMPLETE (2026-07-08)
+
+All 23 roadmap items are implemented, verified, committed, and pushed to
+`origin/roadmap/phase1-correctness` (HEAD `5c374c4`). The full test suite
+passes (118 tests; stdlib `unittest`, run with `python3 -m unittest discover
+-s tests`). Git is clean and in sync with origin (0 ahead / 0 behind). No
+items are blocked (`## BLOCKED` is empty).
+
+- **Phase 1 — Correctness & security: 10/10** (#1–#10) — antropic typo/alias;
+  safe `LLM_MODEL_ID` parsing + audible fallback warnings; session-ownership
+  + namespaced checkpointer thread_id; role-checked access; pooled
+  `MultiServerMCPClient`; correct README routes; env-driven `SECRET_KEY`
+  (prod fail-fast); `SUPERSET_API_KEY` auth path; Ollama local+cloud;
+  persistent volumes + healthchecks + dbt-graph-loader race fix.
+- **Phase 2 — QuickSight parity features: 8/8** (#11–#18) — "AI" nav
+  category; NLQ over the semantic layer; Q-style metadata sidecar in dataset
+  `extra`; embedding/guest-token MCP tools (sha256-audit); alerts/scheduled-
+  report orchestration + on-demand trigger; governance/audit tools
+  (list_rls/list_roles/list_tags); structured `astream_events` v2 streaming
+  (JS regex replaced); unit/integration test suite.
+- **Phase 3 — Advanced hardening: 5/5** (#19–#23) — in-tree `mcp_service`
+  over streamable-http (stdio preserved as default); Ollama cloud→local
+  automatic fallback; robust Langfuse wiring (covers the Ollama path);
+  ML anomaly-detection + forecasting tools; best-effort PDF/screenshot
+  reporting via Superset's existing machinery (gap vs QuickSight documented).
+
+Config reconciliation with the real `/home/mlfts/superset` instance + the #19
+mcp_service investigation are logged below. Real-instance validation was
+performed throughout (live REST probes: `/health`, login, datasets, reports,
+RLS/roles/tags, the mcp_service streamable-http endpoint, screenshot
+endpoints) — no secrets committed (real creds live in the gitignored
+plugin-root `.env`).
+
 ## Phase 1 — Correctness & security
 - [x] 1
 - [x] 2
