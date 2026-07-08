@@ -45,10 +45,12 @@ if model_type == 'bedrock':
         ChatModel = ChatBedrock
     except Exception:
         ChatModel = MockChatModel
-elif model_type == 'antropic':
+elif model_type in ('anthropic', 'antropic'):
+    # 'antropic' is kept as a backward-compatible alias for the original
+    # (mis-spelled) provider token; 'anthropic' is the canonical spelling.
     try:
-        from .inference.antropic_model import ChatAnthropic
-        ChatModel = ChatAnthropic  
+        from .inference.anthropic_model import ChatAnthropic
+        ChatModel = ChatAnthropic
     except Exception:
         ChatModel = MockChatModel
 elif model_type == 'openai':

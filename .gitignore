@@ -40,3 +40,6 @@ private.env
 .DS_Store
 dbt_graph_loader.egg-info
 .vscode
+# Claude Code runtime artifacts (keep .md trackers)
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json

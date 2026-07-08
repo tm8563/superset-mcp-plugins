@@ -4,10 +4,10 @@ from langchain_anthropic import ChatAnthropic as BaseChatAnthropic
 
 
 class ChatAnthropic(BaseChatAnthropic):
-    """A wrapper for the `langchain_aws.ChatBedrock`."""
+    """A wrapper for the `langchain_anthropic.ChatAnthropic`."""
 
     def __init__(self, **kwargs):
-        """Initialize the `ChatBedrock` with specific configuration."""
+        """Initialize the `ChatAnthropic` with specific configuration."""
         model_type, model_id = os.environ['LLM_MODEL_ID'].split(':', 1)
         default_kwargs = {
             'model': model_id,
