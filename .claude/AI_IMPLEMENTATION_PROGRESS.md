@@ -23,7 +23,7 @@ records completion status. Read ROADMAP.md for what each numbered item is.
 - [x] 14
 - [x] 15
 - [x] 16
-- [ ] 17
+- [x] 17
 - [ ] 18
 
 ## Phase 3 — Advanced hardening

@@ -26,28 +26,110 @@ let csrfToken = null;
 function toggleCodeBlock(header) {
     const content = header.nextElementSibling;
     const isExpanded = content.classList.contains('expanded');
-    
-    console.log('Toggling code block, currently expanded:', isExpanded);
-    
     if (isExpanded) {
         // Collapse
         content.classList.remove('expanded');
         header.classList.remove('expanded');
         content.style.maxHeight = '0';
-        console.log('Collapsed');
     } else {
         // Expand
         content.classList.add('expanded');
         header.classList.add('expanded');
         // Set a reasonable max height for the content
         content.style.maxHeight = '1000px';
-        console.log('Expanded, content height:', content.scrollHeight);
     }
 }
 
 
 // Make functions globally available
 window.toggleCodeBlock = toggleCodeBlock;
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderMarkdown(text) {
+    // Escape first, then apply a small markdown subset. Tool blocks are
+    // rendered separately from structured events (roadmap #17), so there are
+    // no "Start Running Tool:" / "Tool Output:" text blocks to regex-parse.
+    let s = escapeHtml(text);
+    s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+         .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+         .replace(/`([^`]+)`/g, '<code>$1</code>')
+         .replace(/\n/g, '<br>');
+    return s;
+}
+
+function scrollChatToBottom() {
+    const c = document.getElementById('chatMessages');
+    c.scrollTop = c.scrollHeight;
+}
+
+function createToolBlock(name, input) {
+    const wrap = document.createElement('div');
+    wrap.className = 'code-block-container';
+    wrap.innerHTML =
+        '<div class="code-block-header collapsed" data-toggle="code-block">' +
+            '<span>\u{1F527} ' + escapeHtml(name) + '</span>' +
+            '<span class="toggle-icon">\u25BC</span>' +
+        '</div>' +
+        '<div class="code-block-content">' +
+            '<pre>' + escapeHtml(input) + '</pre>' +
+            '<div class="tool-output"><strong>Tool Output:</strong>' +
+                '<pre class="tool-output-pre"></pre>' +
+            '</div>' +
+        '</div>';
+    const header = wrap.querySelector('.code-block-header');
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function () { toggleCodeBlock(this); });
+    return { wrap: wrap, outputPre: wrap.querySelector('.tool-output-pre') };
+}
+
+
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderMarkdown(text) {
+    // Tool blocks are rendered separately as structured events (roadmap #17);
+    // this handles only inline markdown over escaped text.
+    let s = escapeHtml(text);
+    s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+         .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+         .replace(/`([^`]+)`/g, '<code>$1</code>')
+         .replace(/\n/g, '<br>');
+    return s;
+}
+
+function createToolBlock(name, input) {
+    const wrap = document.createElement('div');
+    wrap.className = 'code-block-container';
+    wrap.innerHTML =
+        '<div class="code-block-header collapsed" data-toggle="code-block">' +
+            '<span>🔧 ' + escapeHtml(name) + '</span>' +
+            '<span class="toggle-icon">▼</span>' +
+        '</div>' +
+        '<div class="code-block-content">' +
+            '<pre>' + escapeHtml(input) + '</pre>' +
+            '<div class="tool-output"><strong>Tool Output:</strong>' +
+                '<pre class="tool-output-pre"></pre>' +
+            '</div>' +
+        '</div>';
+    const header = wrap.querySelector('.code-block-header');
+    header.addEventListener('click', function () { toggleCodeBlock(this); });
+    header.style.cursor = 'pointer';
+    return { wrap: wrap, outputPre: wrap.querySelector('.tool-output-pre') };
+}
+
+function scrollChat() {
+    const c = document.getElementById('chatMessages');
+    c.scrollTop = c.scrollHeight;
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeCSRF().then(() => {
@@ -173,224 +255,90 @@ async function sendMessage(event) {
             const lines = buffer.split('\n');
             buffer = lines.pop();
             
+            const pendingTools = [];
+            let assistantText = '';
+            let currentTextDiv = null;
+
+            function ensureTextRun() {
+                if (!currentTextDiv) {
+                    currentTextDiv = document.createElement('div');
+                    currentTextDiv.className = 'text-run';
+                    assistantContentDiv.appendChild(currentTextDiv);
+                    assistantText = '';
+                }
+            }
+
+            let textBuffer = '';
+            let textRunDiv = null;
+            const pendingTools = [];
+
             for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    try {
-                        const data = JSON.parse(line.slice(6));
-                        
-                        if (data.type === 'session' && data.session_id) {
-                            currentSessionId = data.session_id;
-                            document.getElementById('sessionId').textContent = currentSessionId.substring(0, 8) + '...';
-                        } else if (data.type === 'chunk' && data.content) {
-                            assistantContentDiv.innerHTML += data.content;
-                            const messagesContainer = document.getElementById('chatMessages');
-                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                        } else if (data.type === 'error') {
-                            assistantContentDiv.innerHTML = data.content;
-                        } else if (data.type === 'done') {
-                            // First, convert tool blocks BEFORE general markdown processing
-                            let finalContent = assistantContentDiv.innerHTML;
-
-                            console.log('=== PROCESSING FINAL CONTENT ===');
-                            console.log('Content length:', finalContent.length);
-                            console.log('Full content:', finalContent);
-                            console.log('================================');
-
-                            // Check if "Start Running Tool:" exists in content
-                            if (finalContent.includes('Start Running Tool:')) {
-                                console.log('✓ "Start Running Tool:" found in content');
-                            } else {
-                                console.log('✗ "Start Running Tool:" NOT found in content');
+                if (!line.startsWith('data: ')) continue;
+                try {
+                    const data = JSON.parse(line.slice(6));
+                    switch (data.type) {
+                        case 'session':
+                            if (data.session_id) {
+                                currentSessionId = data.session_id;
+                                document.getElementById('sessionId').textContent =
+                                    currentSessionId.substring(0, 8) + '...';
                             }
-
-                            // Convert tool execution blocks to expandable format
-                            // The content has REAL newlines, not \n strings
-                            // Strategy: Tools can start in parallel, so we need to match backwards from each "Tool Output"
-                            // First, extract all "Start Running Tool" blocks and all "Tool Output" blocks separately
-
-                            const toolStarts = [];
-                            const toolOutputs = [];
-
-                            // Find all "Start Running Tool" blocks (include the label in fullMatch)
-                            const startPattern = /(Start Running Tool:\s*```\s*[\s\S]*?```)/g;
-                            let match;
-                            while ((match = startPattern.exec(finalContent)) !== null) {
-                                toolStarts.push({
-                                    fullMatch: match[1],
-                                    data: match[1].replace(/Start Running Tool:\s*```\s*/, '').replace(/```\s*$/, '').trim(),
-                                    index: match.index
-                                });
+                            break;
+                        case 'chunk':
+                            if (data.content) {
+                                if (!textRunDiv) {
+                                    textRunDiv = document.createElement('div');
+                                    textRunDiv.className = 'text-run';
+                                    assistantContentDiv.appendChild(textRunDiv);
+                                    textBuffer = '';
+                                }
+                                textBuffer += data.content;
+                                textRunDiv.innerHTML = renderMarkdown(textBuffer);
+                                scrollChatToBottom();
                             }
-
-                            // Find all "Tool Output" blocks (include the label in fullMatch)
-                            const outputPattern = /(Tool Output:\s*```\s*[\s\S]*?```)/g;
-                            while ((match = outputPattern.exec(finalContent)) !== null) {
-                                toolOutputs.push({
-                                    fullMatch: match[1],
-                                    data: match[1].replace(/Tool Output:\s*```\s*/, '').replace(/```\s*$/, '').trim(),
-                                    index: match.index
-                                });
-                            }
-
-                            console.log('Found', toolStarts.length, 'tool starts and', toolOutputs.length, 'tool outputs');
-
-                            // Log each tool start position and preview
-                            toolStarts.forEach((start, idx) => {
-                                console.log('Tool Start #' + (idx + 1) + ' at index ' + start.index + ':', start.data.substring(0, 80));
+                            break;
+                        case 'tool_start': {
+                            // Start a new text run after the tool block.
+                            textRunDiv = null;
+                            textBuffer = '';
+                            const tb = createToolBlock(data.name, data.input);
+                            assistantContentDiv.appendChild(tb.wrap);
+                            pendingTools.push({
+                                name: data.name,
+                                outputPre: tb.outputPre
                             });
-
-                            // Log each tool output position and preview
-                            toolOutputs.forEach((output, idx) => {
-                                console.log('Tool Output #' + (idx + 1) + ' at index ' + output.index + ':', output.data.substring(0, 80));
-                            });
-
-                            // Now pair them up - match in order (first start with first output, etc.)
-                            const pairs = [];
-                            const minPairs = Math.min(toolStarts.length, toolOutputs.length);
-
-                            for (let i = 0; i < minPairs; i++) {
-                                pairs.push({
-                                    start: toolStarts[i],
-                                    output: toolOutputs[i]
-                                });
-                                console.log('Pairing tool #' + (i + 1) + ':', toolStarts[i].data.substring(0, 50), '...');
-                            }
-
-                            console.log('Created', pairs.length, 'pairs');
-
-                            // IMPORTANT: When tools run in parallel, the content structure is:
-                            // "Start Running Tool #1" then "Start Running Tool #2" then "Tool Output #1" then "Tool Output #2"
-                            // We can't treat them as contiguous blocks because Start#1...Output#1 would include Start#2
-                            // Solution: Collect all the segments to replace (both starts and outputs) separately,
-                            // sort them by position, then replace them with placeholders in reverse order to avoid index shifting
-
-                            const segmentsToReplace = [];
-
-                            // Add all start blocks
-                            toolStarts.forEach((start, idx) => {
-                                segmentsToReplace.push({
-                                    type: 'start',
-                                    index: start.index,
-                                    endIndex: start.index + start.fullMatch.length,
-                                    data: start.data,
-                                    pairIndex: idx,
-                                    fullMatch: start.fullMatch
-                                });
-                            });
-
-                            // Add all output blocks
-                            toolOutputs.forEach((output, idx) => {
-                                segmentsToReplace.push({
-                                    type: 'output',
-                                    index: output.index,
-                                    endIndex: output.index + output.fullMatch.length,
-                                    data: output.data,
-                                    pairIndex: idx,
-                                    fullMatch: output.fullMatch
-                                });
-                            });
-
-                            // Sort by position (ascending)
-                            segmentsToReplace.sort((a, b) => a.index - b.index);
-
-                            console.log('Segments to replace (in document order):');
-                            segmentsToReplace.forEach((seg, idx) => {
-                                console.log('  Segment #' + (idx + 1) + ' (' + seg.type + ' for pair ' + seg.pairIndex + '): ' + seg.index + ' - ' + seg.endIndex);
-                            });
-
-                            // Now replace in REVERSE order to avoid index shifting
-                            // But first, we need to build the complete tool block HTML for each pair
-                            const pairPlaceholders = pairs.map((pair, idx) => {
-                                return `§§§TOOL_BLOCK_START§§§${pair.start.data}§§§TOOL_BLOCK_MID§§§${pair.output.data}§§§TOOL_BLOCK_END§§§`;
-                            });
-
-                            // Process segments in reverse order
-                            for (let i = segmentsToReplace.length - 1; i >= 0; i--) {
-                                const segment = segmentsToReplace[i];
-
-                                // If this is a "start" segment, replace with the full tool block placeholder
-                                // If this is an "output" segment, just remove it (empty string)
-                                const replacement = segment.type === 'start' ? pairPlaceholders[segment.pairIndex] : '';
-
-                                // Replace this segment in the content
-                                finalContent = finalContent.substring(0, segment.index) +
-                                             replacement +
-                                             finalContent.substring(segment.endIndex);
-
-                                console.log('Replaced ' + segment.type + ' #' + segment.pairIndex + ' at ' + segment.index + '-' + segment.endIndex);
-                            }
-
-                            console.log('Rebuilt content with', pairs.length, 'placeholders');
-
-                            console.log('Total tool blocks paired:', pairs.length);
-                            if (pairs.length === 0) {
-                                console.log('⚠️ WARNING: No tool blocks matched! Checking for partial patterns...');
-                                console.log('Has "Start Running Tool:"?', finalContent.includes('Start Running Tool:'));
-                                console.log('Has "Tool Output:"?', finalContent.includes('Tool Output:'));
-                                console.log('Has triple backticks?', finalContent.includes('```'));
-                            }
-
-                            // Now do standard markdown conversion
-                            finalContent = finalContent
-                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-                                .replace(/`([^`]+)`/g, '<code>$1</code>')
-                                .replace(/\n/g, '<br>');
-
-                            // Finally, convert tool block placeholders to expandable HTML
-                            let placeholderCount = 0;
-
-                            // Check how many placeholders exist in the content
-                            const placeholderMatches = finalContent.match(/§§§TOOL_BLOCK_START§§§/g);
-                            console.log('Placeholders in content:', placeholderMatches ? placeholderMatches.length : 0);
-
-                            // Check if the section sign survived
-                            console.log('Content contains §§§ ?', finalContent.includes('§§§'));
-                            console.log('First 500 chars after markdown:', finalContent.substring(0, 500));
-
-                            finalContent = finalContent.replace(/§§§TOOL_BLOCK_START§§§([\s\S]*?)§§§TOOL_BLOCK_MID§§§([\s\S]*?)§§§TOOL_BLOCK_END§§§/g, function(match, toolData, outputData) {
-                                placeholderCount++;
-                                console.log('Converting placeholder #' + placeholderCount);
-
-                                const cleanToolData = toolData.replace(/<br>/g, '\n').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-                                const cleanOutputData = outputData.replace(/<br>/g, '\n').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-
-                                return `<br>
-                                    <div class="code-block-container">
-                                        <div class="code-block-header collapsed" data-toggle="code-block">
-                                            <span>🔧 Tool Execution</span>
-                                            <span class="toggle-icon">▼</span>
-                                        </div>
-                                        <div class="code-block-content">
-                                            <pre>${cleanToolData}</pre>
-                                            <div class="tool-output">
-                                                <strong>Tool Output:</strong>
-                                                <pre>${cleanOutputData}</pre>
-                                            </div>
-                                        </div>
-                                    </div><br>
-                                `;
-                            });
-
-                            console.log('Converted', placeholderCount, 'placeholders to HTML');
-
-                            assistantContentDiv.innerHTML = finalContent;
-
-                            // Add event listeners to all expandable headers (CSP-compliant)
-                            const expandableHeaders = assistantMessageDiv.querySelectorAll('[data-toggle="code-block"]');
-                            expandableHeaders.forEach(header => {
-                                header.addEventListener('click', function() {
-                                    toggleCodeBlock(this);
-                                });
-                                header.style.cursor = 'pointer';
-                            });
-
-                            console.log('Final content set with', expandableHeaders.length, 'tool blocks');
+                            scrollChatToBottom();
                             break;
                         }
-                    } catch (e) {
-                        console.error('Error parsing streaming data:', e);
+                        case 'tool_end': {
+                            // Match the oldest pending tool_start with the same name
+                            // (FIFO) so parallel tool calls pair correctly.
+                            const idx = pendingTools.findIndex(t => t.name === data.name);
+                            const target = idx >= 0
+                                ? pendingTools.splice(idx, 1)[0]
+                                : pendingTools.pop();
+                            if (target) {
+                                target.outputPre.textContent =
+                                    data.output == null ? '' : String(data.output);
+                            }
+                            scrollChatToBottom();
+                            break;
+                        }
+                        case 'error':
+                            if (!textRunDiv) {
+                                textRunDiv = document.createElement('div');
+                                assistantContentDiv.appendChild(textRunDiv);
+                            }
+                            textRunDiv.innerHTML = escapeHtml(data.content || '');
+                            scrollChatToBottom();
+                            break;
+                        case 'done':
+                            // Structured events are rendered live as they arrive;
+                            // no "Start Running Tool:"/"Tool Output:" regex to run.
+                            break;
                     }
+                } catch (e) {
+                    console.error('Error parsing streaming data:', e);
                 }
             }
         }
@@ -410,139 +358,11 @@ function addMessage(content, sender) {
     const messagesContainer = document.getElementById('chatMessages');
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}`;
-
-    let formattedContent = content;
-
-    // For assistant messages, process tool blocks first
-    if (sender === 'assistant') {
-        // Extract all "Start Running Tool" and "Tool Output" blocks
-        const toolStarts = [];
-        const toolOutputs = [];
-
-        const startPattern = /(Start Running Tool:\s*```\s*[\s\S]*?```)/g;
-        let match;
-        while ((match = startPattern.exec(formattedContent)) !== null) {
-            toolStarts.push({
-                fullMatch: match[1],
-                data: match[1].replace(/Start Running Tool:\s*```\s*/, '').replace(/```\s*$/, '').trim(),
-                index: match.index
-            });
-        }
-
-        const outputPattern = /(Tool Output:\s*```\s*[\s\S]*?```)/g;
-        while ((match = outputPattern.exec(formattedContent)) !== null) {
-            toolOutputs.push({
-                fullMatch: match[1],
-                data: match[1].replace(/Tool Output:\s*```\s*/, '').replace(/```\s*$/, '').trim(),
-                index: match.index
-            });
-        }
-
-        // Pair them up - match in order (first start with first output, etc.)
-        const pairs = [];
-        const minPairs = Math.min(toolStarts.length, toolOutputs.length);
-
-        for (let i = 0; i < minPairs; i++) {
-            pairs.push({
-                start: toolStarts[i],
-                output: toolOutputs[i]
-            });
-        }
-
-        // Use the same replacement strategy as in sendMessage to handle parallel tool execution
-        const segmentsToReplace = [];
-
-        // Add all start blocks
-        toolStarts.forEach((start, idx) => {
-            segmentsToReplace.push({
-                type: 'start',
-                index: start.index,
-                endIndex: start.index + start.fullMatch.length,
-                data: start.data,
-                pairIndex: idx,
-                fullMatch: start.fullMatch
-            });
-        });
-
-        // Add all output blocks
-        toolOutputs.forEach((output, idx) => {
-            segmentsToReplace.push({
-                type: 'output',
-                index: output.index,
-                endIndex: output.index + output.fullMatch.length,
-                data: output.data,
-                pairIndex: idx,
-                fullMatch: output.fullMatch
-            });
-        });
-
-        // Sort by position
-        segmentsToReplace.sort((a, b) => a.index - b.index);
-
-        // Build placeholders
-        const pairPlaceholders = pairs.map((pair, idx) => {
-            return `§§§TOOL_BLOCK_START§§§${pair.start.data}§§§TOOL_BLOCK_MID§§§${pair.output.data}§§§TOOL_BLOCK_END§§§`;
-        });
-
-        // Replace in reverse order
-        for (let i = segmentsToReplace.length - 1; i >= 0; i--) {
-            const segment = segmentsToReplace[i];
-            const replacement = segment.type === 'start' ? pairPlaceholders[segment.pairIndex] : '';
-            formattedContent = formattedContent.substring(0, segment.index) +
-                             replacement +
-                             formattedContent.substring(segment.endIndex);
-        }
-    }
-
-    // Now do standard markdown conversion
-    formattedContent = formattedContent
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\n/g, '<br>');
-
-    // Convert tool block placeholders to expandable HTML
-    if (sender === 'assistant') {
-        formattedContent = formattedContent.replace(/§§§TOOL_BLOCK_START§§§([\s\S]*?)§§§TOOL_BLOCK_MID§§§([\s\S]*?)§§§TOOL_BLOCK_END§§§/g, function(match, toolData, outputData) {
-            const cleanToolData = toolData.replace(/<br>/g, '\n').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-            const cleanOutputData = outputData.replace(/<br>/g, '\n').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-
-            return `<br>
-                <div class="code-block-container">
-                    <div class="code-block-header collapsed" data-toggle="code-block">
-                        <span>🔧 Tool Execution</span>
-                        <span class="toggle-icon">▼</span>
-                    </div>
-                    <div class="code-block-content">
-                        <pre>${cleanToolData}</pre>
-                        <div class="tool-output">
-                            <strong>Tool Output:</strong>
-                            <pre>${cleanOutputData}</pre>
-                        </div>
-                    </div>
-                </div><br>
-            `;
-        });
-    }
-
-    messageDiv.innerHTML = `
-        <div>${formattedContent}</div>
-        <div class="message-time">${new Date().toLocaleTimeString()}</div>
-    `;
-
+    messageDiv.innerHTML =
+        `<div>${renderMarkdown(content)}</div>` +
+        `<div class="message-time">${new Date().toLocaleTimeString()}</div>`;
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-    // Add event listeners to expandable headers (CSP-compliant)
-    if (sender === 'assistant') {
-        const expandableHeaders = messageDiv.querySelectorAll('[data-toggle="code-block"]');
-        expandableHeaders.forEach(header => {
-            header.addEventListener('click', function() {
-                toggleCodeBlock(this);
-            });
-            header.style.cursor = 'pointer';
-        });
-    }
 }
 
 function showTypingIndicator() {

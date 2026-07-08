@@ -130,11 +130,11 @@ class AIAssistantAgent:
             async for chunk in stream_generator():
                 if chunk:
                     yield chunk
-            
+
         except Exception as e:
             logger.error(f"Error generating AI response: {e}")
             error_message = "I'm sorry, I encountered an error while processing your request. Please try again."
-            yield error_message
+            yield {'type': 'error', 'content': error_message}
     
     def sync_get_response(self, message, session_id=None, username=None):
         """Synchronous wrapper for async response generation"""
@@ -148,8 +148,19 @@ class AIAssistantAgent:
             response_parts = []
             
             async def collect_response():
-                async for chunk in self.get_response_stream(message, session_id, username):
-                    response_parts.append(chunk)
+                async for ev in self.get_response_stream(message, session_id, username):
+                    etype = ev.get('type') if isinstance(ev, dict) else None
+                    if etype == 'chunk':
+                        response_parts.append(ev.get('content', ''))
+                    elif etype == 'tool_start':
+                        response_parts.append(f"\n[Running tool: {ev.get('name')}]\n")
+                    elif etype == 'tool_end':
+                        response_parts.append(
+                            f"\n[Tool output ({ev.get('name')}): {ev.get('output')}]\n")
+                    elif etype == 'error':
+                        response_parts.append(ev.get('content', ''))
+                    elif isinstance(ev, str):
+                        response_parts.append(ev)
                 return ''.join(response_parts)
             
             complete_response = loop.run_until_complete(collect_response())
@@ -616,8 +627,8 @@ class AISupersetAssistantView(BaseView):
                     
                 async def stream_response():
                     async for chunk in self.ai_agent.get_response_stream(message, new_session_id, username):
-                        if chunk and chunk.strip():
-                            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+                        if chunk:
+                            yield f"data: {json.dumps(chunk)}\n\n"
                     
                 async_gen = stream_response()
                 try:

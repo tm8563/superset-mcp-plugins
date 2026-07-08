@@ -46,6 +46,8 @@ class LLMEventType(Enum):
     RETRIEVER_START = 'on_retriever_start'
     RETRIEVER_END = 'on_retriever_end'
     CHAT_CHUNK = 'on_chat_model_stream'
+    TOOL_START = 'tool_start'
+    TOOL_END = 'tool_end'
     DONE = 'done'
 
 
@@ -88,34 +90,21 @@ class ChatMessage:
 
     @classmethod
     def from_event(cls, event: dict) -> 'ChatMessage':
-        """Convert an event from the LLM agent to a `ChatMessage` object."""
-        if event['event'] in ('on_tool_start', 'on_tool_end'):
-            print(event)
-            print('--------------------')
+        """Convert an astream_events v2 event into a structured ChatMessage.
+
+        Tool events carry a structured payload (name + input/output) instead
+        of being flattened into ``Start Running Tool:``/``Tool Output:`` text
+        blocks, so the client can render them by event type without regex
+        parsing (roadmap #17).
+        """
         match event['event']:
             case 'on_chat_model_stream':
                 if event['data']['chunk'].content:
                     return cls._handle_on_chat_model_stream(event)
             case 'on_tool_start':
-                return ChatMessage(LLMEventType.CHAT_CHUNK, cls.Sender.AI,
-                                   f'''
-
-Start Running Tool:
-```
-Data: {event['data']['input']}
-Function: {event['name']}
-```
-''')
+                return cls._tool_start(event)
             case 'on_tool_end':
-                return ChatMessage(LLMEventType.CHAT_CHUNK, cls.Sender.AI,
-                                   f'''
-
-Tool Output:
-```
-{event['data']['output'].content}
-```
-''')
-                                #    '')
+                return cls._tool_end(event)
             # The conversation is done.
             case 'done':
                 return ChatMessage(
@@ -125,13 +114,43 @@ Tool Output:
                 )
             # Known events that we ignore.
             case 'on_chat_model_start' | 'on_chain_start' | 'on_chain_end' \
-                | 'on_chat_model_stream' | 'on_chat_model_end' | \
-                    'on_chain_stream' | 'on_tool_start' | 'on_tool_end':
+                | 'on_chat_model_end' | 'on_chain_stream':
                 Logger().get_logger().debug('Ignoring message', event['event'])
                 return ''
             # Unknown events.
             case _:
                 raise ValueError('Unknown event', event)
+
+    @staticmethod
+    def _stringify(value) -> str:
+        """Coerce a tool input/output value into a JSON-safe string."""
+        if value is None:
+            return ''
+        if isinstance(value, str):
+            return value
+        try:
+            return json.dumps(value, default=str)
+        except Exception:
+            return str(value)
+
+    @classmethod
+    def _tool_start(cls, event: dict) -> 'ChatMessage':
+        return ChatMessage(
+            LLMEventType.TOOL_START, cls.Sender.AI, content='',
+            payload={'name': event.get('name'),
+                     'input': cls._stringify(event.get('data', {}).get('input'))},
+        )
+
+    @classmethod
+    def _tool_end(cls, event: dict) -> 'ChatMessage':
+        output = event.get('data', {}).get('output')
+        output_content = getattr(output, 'content', None)
+        if not isinstance(output_content, str):
+            output_content = cls._stringify(output)
+        return ChatMessage(
+            LLMEventType.TOOL_END, cls.Sender.AI, content='',
+            payload={'name': event.get('name'), 'output': output_content},
+        )
 
     @classmethod
     def _handle_on_chat_model_stream(cls, event: dict) -> 'ChatMessage':
@@ -150,6 +169,20 @@ Tool Output:
         else:
             return ChatMessage(LLMEventType.CHAT_CHUNK, cls.Sender.AI, content
                                if content is not None else '')
+
+    def to_event_dict(self) -> dict:
+        """Serialize to a JSON-safe SSE event dict for the streaming client."""
+        if self.type == LLMEventType.CHAT_CHUNK:
+            return {'type': 'chunk', 'content': self.content}
+        if self.type == LLMEventType.TOOL_START:
+            return {'type': 'tool_start', 'name': self.payload.get('name'),
+                    'input': self.payload.get('input')}
+        if self.type == LLMEventType.TOOL_END:
+            return {'type': 'tool_end', 'name': self.payload.get('name'),
+                    'output': self.payload.get('output')}
+        if self.type == LLMEventType.DONE:
+            return {'type': 'done'}
+        return {'type': 'chunk', 'content': self.content}
 
     def to_dict(self) -> dict:
         """Returns a dictionary representation of the message."""
@@ -430,5 +463,5 @@ Use this retriever to answer questions about model lineage, dependencies, testin
         async with LLMAgent(tools=tools, md_uri=md_uri) as llm_agent:
             async for chat_msg in llm_agent.astream_events(
                  message, user_config):
-                yield chat_msg.content
+                yield chat_msg.to_event_dict()
     return stream_agent_response
