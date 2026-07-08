@@ -76,6 +76,15 @@ AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_REGION=us-east-1
 
+# For Ollama (local or cloud) — use LLM_MODEL_ID=ollama:<model>, e.g.
+# LLM_MODEL_ID=ollama:llama3.1
+# LOCAL: point at a local daemon (no key needed)
+OLLAMA_BASE_URL=http://localhost:11434
+# CLOUD: point at https://ollama.com and set an API key (sent as Bearer)
+#OLLAMA_BASE_URL=https://ollama.com
+#OLLAMA_API_KEY=oll-your_cloud_key
+#OLLAMA_MODEL=llama3.1
+
 # Optional: Graph Database for dbt
 GRAPH_DB=neo4j  # or 'falkordb'
 GRAPH_HOST=neo4j

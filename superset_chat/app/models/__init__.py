@@ -72,7 +72,7 @@ For now, I can help with basic Superset questions using my mock responses."""
             time.sleep(0.05)
             yield AIMessageChunk(content=word + " ")
 
-_KNOWN_PROVIDERS = ('bedrock', 'anthropic', 'openai')
+_KNOWN_PROVIDERS = ('bedrock', 'anthropic', 'openai', 'ollama')
 
 if model_type == 'bedrock':
     try:
@@ -109,6 +109,18 @@ elif model_type == 'openai':
             "Failed to initialize the 'openai' chat model (%s); falling back "
             "to the mock chat model. Ensure langchain_openai is installed and "
             "OPENAI_API_KEY is set.",
+            exc,
+        )
+        ChatModel = MockChatModel
+elif model_type == 'ollama':
+    try:
+        from .inference.ollama_model import ChatOllama
+        ChatModel = ChatOllama
+    except Exception as exc:  # pragma: no cover - depends on env/deps
+        logger.warning(
+            "Failed to initialize the 'ollama' chat model (%s); falling back "
+            "to the mock chat model. Ensure langchain_ollama is installed; "
+            "set OLLAMA_BASE_URL (and OLLAMA_API_KEY for cloud).",
             exc,
         )
         ChatModel = MockChatModel
