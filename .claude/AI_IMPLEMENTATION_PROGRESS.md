@@ -10,7 +10,7 @@ records completion status. Read ROADMAP.md for what each numbered item is.
 - [x] 3
 - [x] 4
 - [x] 5
-- [ ] 6
+- [x] 6
 - [ ] 7
 - [ ] 8
 - [ ] 9

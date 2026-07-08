@@ -226,23 +226,26 @@ Once in the chat interface, try these queries:
 
 ### API Endpoints
 
-The plugin provides the following REST endpoints:
+The plugin provides the following REST endpoints. The route prefix
+(`/aisupersetassistantview`) is auto-derived by Flask-AppBuilder from the
+view class name `AISupersetAssistantView`; the chat UI's JavaScript calls
+these same paths.
 
-- **POST** `/ai_superset_assistant/api/new_session` - Create a new chat session
-- **POST** `/ai_superset_assistant/api/chat` - Send a message (synchronous response)
-- **POST** `/ai_superset_assistant/api/chat_stream` - Send a message (streaming response)
-- **POST** `/ai_superset_assistant/api/clear_session` - Clear a chat session
+- **POST** `/aisupersetassistantview/api/new_session` - Create a new chat session
+- **POST** `/aisupersetassistantview/api/chat` - Send a message (synchronous response)
+- **POST** `/aisupersetassistantview/api/chat_stream` - Send a message (streaming response)
+- **POST** `/aisupersetassistantview/api/clear_session` - Clear a chat session
 
 Example API usage:
 
 ```bash
 # Create a new session
-curl -X POST http://localhost:8088/ai_superset_assistant/api/new_session \
+curl -X POST http://localhost:8088/aisupersetassistantview/api/new_session \
   -H "Content-Type: application/json" \
   -b cookies.txt
 
 # Send a message with streaming
-curl -X POST http://localhost:8088/ai_superset_assistant/api/chat_stream \
+curl -X POST http://localhost:8088/aisupersetassistantview/api/chat_stream \
   -H "Content-Type: application/json" \
   -b cookies.txt \
   -d '{"message": "Show me all dashboards", "session_id": "your-session-id"}'
