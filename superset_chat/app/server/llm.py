@@ -385,15 +385,29 @@ async def get_stream_agent_responce(session_id, message,
                             if v is not None}
                 }
             }
-    elif TRANSPORT_TYPE == 'sse':
+    elif TRANSPORT_TYPE in ('sse', 'streamable_http', 'streamable-http'):
+        # Built-in Superset mcp_service (RBAC-enforced, fail-closed) — the
+        # migration target instead of the alpha superset-mcp-server (roadmap
+        # #19). Run it with: `superset mcp run --host 0.0.0.0 --port 5008`
+        # (streamable-http at /mcp; legacy SSE at /sse). Auth: a Bearer token
+        # the mcp_service accepts — prefer a scoped FAB API key
+        # (SUPERSET_API_KEY -> API-key passthrough, honors per-user RBAC),
+        # else MCP_TOKEN (a JWT / dev token).
+        token = os.environ.get('SUPERSET_API_KEY') or os.environ.get('MCP_TOKEN')
+        if TRANSPORT_TYPE in ('streamable_http', 'streamable-http'):
+            url = os.environ.get('MCP_SERVICE_URL', f'http://{mcp_host}/mcp')
+            transport = 'streamable_http'
+        else:
+            url = os.environ.get('MCP_SERVICE_URL', f'http://{mcp_host}/sse')
+            transport = 'sse'
+        headers = {'Authorization': f'Bearer {token}'} if token else {}
         mcps = {
-                    "SupersetMCP": {
-                        "url": f"http://{mcp_host}/sse",
-                        "transport": "sse",
-                        "headers": {"Authorization": f"""Bearer {
-                            os.environ.get('MCP_TOKEN')}"""}
-                    }
-                }
+            "SupersetMCP": {
+                "url": url,
+                "transport": transport,
+                "headers": headers,
+            }
+        }
     datetime_tool = Tool(
         name="Datetime",
         func=lambda x: datetime.now().isoformat(),

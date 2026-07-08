@@ -60,9 +60,15 @@ SUPERSET_PASSWORD=admin
 #SUPERSET_API_KEY=sst-your-api-key
 
 # MCP Configuration
-TRANSPORT_TYPE=stdio  # or 'sse'
-mcp_host=mcp_sse_server:8000  # if using SSE transport
-MCP_TOKEN=your_token  # if using SSE transport
+# TRANSPORT_TYPE:
+#   stdio            - alpha superset-mcp-server spawned in-process (default)
+#   streamable_http  - Superset's built-in mcp_service (RBAC-enforced; #19).
+#                      Run it: `superset mcp run --host 0.0.0.0 --port 5008`
+#   sse              - legacy SSE MCP server (/sse)
+TRANSPORT_TYPE=stdio
+#mcp_host=mcp_service:5008          # host:port of the built-in mcp_service
+#MCP_SERVICE_URL=http://mcp_service:5008/mcp   # override the full URL
+#MCP_TOKEN=your_token               # Bearer for the built-in service (or SUPERSET_API_KEY)
 
 # LLM Provider (choose one)
 # For OpenAI

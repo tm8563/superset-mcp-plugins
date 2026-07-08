@@ -47,6 +47,43 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # Built-in Superset mcp_service over streamable-http (roadmap #19) — the
+  # RBAC-enforced, fail-closed migration target instead of the alpha
+  # superset-mcp-server. Select it from the plugin with:
+  #   TRANSPORT_TYPE=streamable_http
+  #   mcp_host=mcp_service:5008
+  #   SUPERSET_API_KEY=sst-...        (preferred; or MCP_TOKEN=<jwt>)
+  # NOTE: requires a Superset image that ships the mcp_service CLI
+  # (`superset mcp run`); apache/superset:4.1.1 may not — point the build at a
+  # Superset version that has it (e.g. the /home/mlfts/superset build).
+  mcp_service:
+    env_file:
+      - .env
+    build:
+      context: superset
+      dockerfile: Dockerfile
+    container_name: mcp_service
+    command: ["superset", "mcp", "run", "--host", "0.0.0.0", "--port", "5008"]
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_NAME: postgres
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+    networks:
+      - data-lake-network
+    ports:
+      - "5008:5008"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('localhost',5008),5).close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
   postgres:
     image: postgres:15
     container_name: postgres
