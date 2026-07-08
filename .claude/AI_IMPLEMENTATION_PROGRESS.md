@@ -201,7 +201,7 @@ Live: endpoint paths confirmed in the openapi + source; the live dev instance
 
 ### 2026-07-08 — installing the plugin into the real /home/mlfts/superset instance (deployment verification, not a roadmap item)
 
-BLOCKED by a dependency-version conflict: the plugin targets
+RESOLVED. BLOCKED by a dependency-version conflict: the plugin targets
 `apache/superset:4.1.1` (marshmallow 3 / starlette 0.x / packaging 24), but the
 real `/home/mlfts/superset` dev instance is a newer build (marshmallow 4.3.0 /
 starlette 1.3.1 / packaging 25.0). A `pip install -e` of the plugin (the README
@@ -214,20 +214,37 @@ install path) would DOWNGRADE Superset-critical packages and break the instance
   — breaks the ASGI stack.
 - `packaging` 25.0 -> 24.2 (pinned `<25` by `langchain-core`).
 
-NOT performed — the breaking install was aborted; the instance was left
-untouched (copied plugin dir removed, `/health` OK, package versions
-unchanged). No `FLASK_APP_MUTATOR` was added and no `pip install` was run.
+NOT performed as a blind `pip install -e` — instead RESOLVED via a non-breaking
+install (commit 3bdcde4 + the steps below):
 
-Paths forward (need user decision):
-1. Run the plugin against its OWN docker-compose stack
-   (`apache/superset:4.1.1`, the repo's `docker-compose.yaml` Quick Start),
-   which has the older compatible deps — the user can click through the AI
-   Assistant there.
-2. Upgrade the plugin's deps to marshmallow-4 / starlette-1-compatible versions
-  (newer `langchain-community`/`superset-mcp-server`, or drop the alpha
-  `superset-mcp-server` in favor of the in-tree `mcp_service` from #19) and
-  re-pin — a separate compatibility effort.
-3. Point the plugin at a Superset 4.1.1 instance (matches its pinned deps).
+1. Made the dbt-graph imports lazy (skip langchain-community/langchain-neo4j,
+   which pin marshmallow<4) + switched `from langchain.tools import Tool` to
+   `from langchain_core.tools import Tool` (langchain 1.x removed the former).
+2. Installed the plugin NON-editable (`pip install --no-deps`) so only
+   `superset_chat` goes into site-packages — NOT the repo root (which has a
+   `superset/` dir that shadowed the real Superset package).
+3. Installed the MINIMAL compatible dep set constrained to keep
+   marshmallow 4.3.0 / starlette 1.3.1 / packaging 25.0 (langchain 1.3.11,
+   langgraph 1.2.8, langchain-core 1.4.8, langchain-mcp-adapters, the LLM
+   providers, psycopg, langfuse). Superset-critical packages UNCHANGED.
+4. Used the in-tree `mcp_service` (TRANSPORT_TYPE=streamable_http, #19)
+   instead of the alpha `superset-mcp-server` (which pins starlette<0.38).
+5. Added FLASK_APP_MUTATOR + plugin env to the real superset_config.py
+   (docker/pythonpath_dev/superset_config.py) + created the gitignored
+   docker/.env-local.
 
-UX roadmap items #24–#29 remain COMPLETE (code + tests); this blocker only
-affects installing into THIS specific newer real instance.
+VERIFIED LIVE: the plugin registered ("✅ AI Superset Assistant plugin
+registered successfully!"); the view route exists (401 for unauth = registered,
+not 404); the /api/datasets, /api/suggestions, /api/new_session,
+/api/chat_stream endpoints are registered (401/405, not 404); the chat pipeline
+works end-to-end — Ollama (mistral-large-3:675b-cloud via host.docker.internal)
+streams a response with tool_start/tool_end indicators.
+
+CAVEAT: the mcp_service dev-fallback auth (MCP_DEV_USERNAME=admin) exposes only
+the 4 meta MCP tools, not the ~70 RBAC-protected Superset tools (those need a
+permissioned token). The chat can use the plugin's local tools (reports,
+governance, NLQ, ML, embedding, PDF) but Superset-browse-via-MCP is limited
+until a proper mcp_service token is configured.
+
+UX roadmap items #24–#29 remain COMPLETE (code + tests). The plugin is now
+installable into this newer real instance without breaking it.
