@@ -43,3 +43,6 @@ dbt_graph_loader.egg-info
 # Claude Code runtime artifacts (keep .md trackers)
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
+
+# local UX preview artifact (roadmap #24/#25)
+assistant_preview.html
