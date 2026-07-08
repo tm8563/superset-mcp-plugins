@@ -209,7 +209,13 @@ class LLMAgent:
 
 
 def get_user_chat_config(session_id: str, username: str = None) -> dict:
-    chat_config = {'configurable': {'thread_id': session_id},
+    # Namespace the checkpointer thread_id by username so a user cannot
+    # read/append to another user's conversation history by reusing their
+    # session_id. The in-memory ownership check in the view is wiped on
+    # restart, but the Postgres checkpointer is persistent, so the thread_id
+    # itself must encode the owner.
+    thread_id = f"{username}:{session_id}" if username else session_id
+    chat_config = {'configurable': {'thread_id': thread_id},
                    "recursion_limit": 100}
     if LANGFUSE_AVAILABLE and os.environ.get('LANGFUSE_HOST'):
         langfuse_handler = CallbackHandler(

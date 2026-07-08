@@ -7,7 +7,7 @@ records completion status. Read ROADMAP.md for what each numbered item is.
 ## Phase 1 — Correctness & security
 - [x] 1
 - [x] 2
-- [ ] 3
+- [x] 3
 - [ ] 4
 - [ ] 5
 - [ ] 6

@@ -17,6 +17,14 @@ from superset_chat.app.databases.postgres import Database
 
 logger = logging.getLogger(__name__)
 
+
+def _current_username():
+    """Return the authenticated user's username, or 'anonymous'."""
+    if current_user and current_user.is_authenticated:
+        return getattr(current_user, 'username', 'anonymous')
+    return 'anonymous'
+
+
 def admin_only(f):
     """Decorator to restrict access to authenticated users."""
     @wraps(f)
@@ -45,13 +53,27 @@ class AIAssistantAgent:
         self.sessions = {}  # Track session metadata
     
     def create_session(self):
-        """Create a new chat session"""
+        """Create a new chat session bound to the current user."""
         session_id = str(uuid.uuid4())
         self.sessions[session_id] = {
             'created_at': datetime.now(),
-            'username': getattr(current_user, 'username', 'anonymous') if current_user and current_user.is_authenticated else 'anonymous'
+            'username': _current_username()
         }
         return session_id
+
+    def owns_session(self, session_id, username):
+        """True if ``session_id`` exists and belongs to ``username``."""
+        session = self.sessions.get(session_id)
+        return bool(session) and session.get('username') == username
+
+    def session_belongs_to_other(self, session_id, username):
+        """True if ``session_id`` exists but is owned by a different user.
+
+        Used to reject cross-user session_id reuse (hijack prevention) before
+        any read/append against the shared Postgres checkpointer.
+        """
+        session = self.sessions.get(session_id)
+        return bool(session) and session.get('username') != username
     
     async def get_response_stream(self, message, session_id=None, username=None):
         """Generate AI response using real LangGraph implementation"""
@@ -503,9 +525,16 @@ class AISupersetAssistantView(BaseView):
         
         if not message:
             return jsonify({'error': 'Message is required'}), 400
-        
+
+        username = _current_username()
+        if session_id and self.ai_agent.session_belongs_to_other(session_id, username):
+            logger.warning(
+                "User %r denied access to session %r (not owner)",
+                username, session_id,
+            )
+            return jsonify({'error': 'You do not have access to this session'}), 403
+
         try:
-            username = getattr(current_user, 'username', 'anonymous') if current_user and current_user.is_authenticated else 'anonymous'
             response, session_id = self.ai_agent.sync_get_response(message, session_id, username)
             return jsonify({
                 'response': response,
@@ -527,7 +556,15 @@ class AISupersetAssistantView(BaseView):
         
         if not message:
             return jsonify({'error': 'Message is required'}), 400
-        
+
+        username = _current_username()
+        if session_id and self.ai_agent.session_belongs_to_other(session_id, username):
+            logger.warning(
+                "User %r denied access to session %r (not owner)",
+                username, session_id,
+            )
+            return jsonify({'error': 'You do not have access to this session'}), 403
+
         def generate_stream():
             """Generator function for streaming responses"""
             try:
@@ -535,9 +572,7 @@ class AISupersetAssistantView(BaseView):
                     new_session_id = self.ai_agent.create_session()
                 else:
                     new_session_id = session_id
-                        
-                username = getattr(current_user, 'username', 'anonymous') if current_user and current_user.is_authenticated else 'anonymous'
-                    
+
                 yield f"data: {json.dumps({'type': 'session', 'session_id': new_session_id})}\n\n"
                     
                 loop = asyncio.new_event_loop()
@@ -583,12 +618,23 @@ class AISupersetAssistantView(BaseView):
     @admin_only
     @failure_tolerant
     def clear_session(self):
-        """Clear a chat session"""
+        """Clear a chat session (only its owner may clear it)."""
         data = request.get_json()
         session_id = data.get('session_id')
-        
-        if session_id and session_id in self.ai_agent.sessions:
+
+        if not session_id:
+            return jsonify({'error': 'session_id is required'}), 400
+
+        username = _current_username()
+        if self.ai_agent.session_belongs_to_other(session_id, username):
+            logger.warning(
+                "User %r denied clearing session %r (not owner)",
+                username, session_id,
+            )
+            return jsonify({'error': 'You do not have access to this session'}), 403
+
+        if session_id in self.ai_agent.sessions:
             del self.ai_agent.sessions[session_id]
             return jsonify({'message': 'Session cleared successfully'})
-        
+
         return jsonify({'error': 'Session not found'}), 404
