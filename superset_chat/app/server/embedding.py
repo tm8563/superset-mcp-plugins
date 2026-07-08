@@ -18,7 +18,7 @@ import json
 import logging
 from typing import List, Optional
 
-from langchain.tools import Tool
+from langchain_core.tools import Tool
 
 from .semantic_layer import SupersetRestClient
 

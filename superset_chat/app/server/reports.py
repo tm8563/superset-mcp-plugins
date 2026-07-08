@@ -9,7 +9,7 @@ the open-source analogue of QuickSight's ``StartDashboardSnapshotJobSchedule``.
 import json
 import logging
 
-from langchain.tools import Tool
+from langchain_core.tools import Tool
 
 from .semantic_layer import SupersetRestClient
 

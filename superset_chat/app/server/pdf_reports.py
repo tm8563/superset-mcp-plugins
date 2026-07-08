@@ -36,7 +36,7 @@ import logging
 import os
 from typing import Optional
 
-from langchain.tools import Tool
+from langchain_core.tools import Tool
 
 from .semantic_layer import SupersetRestClient
 

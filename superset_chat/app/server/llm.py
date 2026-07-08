@@ -6,9 +6,10 @@ from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage, BaseMessage, \
     SystemMessage, ToolMessage, AIMessage, AIMessageChunk
 
-from langchain_neo4j import GraphCypherQAChain, Neo4jGraph
-from langchain.chains import FalkorDBQAChain
-from langchain_community.graphs import FalkorDBGraph
+# The optional dbt-graph chain (langchain-community/langchain-neo4j) is imported
+# lazily inside the GRAPH_DB branches below. Those packages pin
+# marshmallow<4 / pull heavy deps that conflict with newer Superset (marshmallow
+# 4), so the plugin must import without them when dbt lineage isn't used.
 
 from ..databases.postgres import Database
 from ..models import ChatModel
@@ -27,7 +28,7 @@ import threading
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from datetime import datetime
-from langchain.tools import Tool
+from langchain_core.tools import Tool
 
 try:
     from langfuse.callback import CallbackHandler
@@ -465,6 +466,8 @@ async def get_stream_agent_responce(session_id, message,
 Use this retriever to answer questions about model lineage, dependencies, testing coverage, and data flow in our dbt project.
     '''
     if os.environ.get('GRAPH_DB') == 'falkordb':
+        from langchain_community.graphs import FalkorDBGraph
+        from langchain.chains import FalkorDBQAChain
         graph = FalkorDBGraph(host=os.environ.get('GRAPH_HOST', 'falkordb'),
                               port=6379, database="dbt_graph",
                               username=os.environ.get('GRAPH_USER'),
@@ -475,6 +478,7 @@ Use this retriever to answer questions about model lineage, dependencies, testin
                                             description=f"Query and retrieve dbt data from your Falkor graph database using Cypher syntax\n{dbt_prompt}")
         tools.append(retriever_tool)
     elif os.environ.get('GRAPH_DB') == 'neo4j':
+        from langchain_neo4j import GraphCypherQAChain, Neo4jGraph
         graph = Neo4jGraph(url=f"bolt://{os.environ.get('GRAPH_HOST', 'neo4j')}:7687",
                            username=os.environ.get('GRAPH_USER'),
                            password=os.environ.get('GRAPH_PASSWORD'),

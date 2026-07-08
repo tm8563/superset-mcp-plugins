@@ -165,6 +165,7 @@ def _install():
     reg_path('langchain_core.messages',
              HumanMessage=_dummy, BaseMessage=object, SystemMessage=_dummy,
              ToolMessage=_dummy, AIMessage=_dummy, AIMessageChunk=_dummy)
+    reg_path('langchain_core.tools', Tool=FakeTool)
     reg_path('langchain.tools', Tool=FakeTool)
     reg_path('langgraph.checkpoint.postgres.aio',
              AsyncPostgresSaver=SimpleNamespace(from_conn_string=lambda *a, **k: _FakeAsyncCtx()))

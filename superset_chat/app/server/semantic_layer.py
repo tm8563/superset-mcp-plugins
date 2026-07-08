@@ -24,7 +24,7 @@ from typing import Dict, List, Optional
 
 import httpx
 from pydantic import BaseModel
-from langchain.tools import Tool
+from langchain_core.tools import Tool
 
 from ..models import ChatModel
 
