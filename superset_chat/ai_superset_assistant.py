@@ -16,6 +16,7 @@ from superset_chat.app.server.llm import get_stream_agent_responce
 from superset_chat.app.server.capabilities import get_capabilities_json
 from superset_chat.app.server.suggestions import suggest_questions
 from superset_chat.app.server.semantic_layer import SupersetRestClient
+from superset_chat.app.server.errors import error_event, classify_error
 from superset_chat.app.databases.postgres import Database
 
 logger = logging.getLogger(__name__)
@@ -74,14 +75,20 @@ def ai_assistant_only(f):
 
 
 def failure_tolerant(f):
-    """Decorator for error handling."""
+    """Decorator for error handling — returns a categorized, user-friendly
+    error (roadmap #26), never a stack trace."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         try:
             return f(*args, **kwargs)
         except Exception as e:
             logger.error(f"AI Assistant error: {e}")
-            return jsonify({"error": "Something went wrong"}), 500
+            info = classify_error(e)
+            return jsonify({
+                'error': info['message'],
+                'category': info['category'],
+                'next_step': info['next_step'],
+            }), 500
     return decorated_function
 
 
@@ -136,8 +143,7 @@ class AIAssistantAgent:
 
         except Exception as e:
             logger.error(f"Error generating AI response: {e}")
-            error_message = "I'm sorry, I encountered an error while processing your request. Please try again."
-            yield {'type': 'error', 'content': error_message}
+            yield error_event(e)
     
     def sync_get_response(self, message, session_id=None, username=None):
         """Synchronous wrapper for async response generation"""
@@ -687,11 +693,7 @@ class AISupersetAssistantView(BaseView):
                     
             except Exception as e:
                 logger.error(f"Streaming chat error: {e}")
-                error_msg = json.dumps({
-                    'type': 'error', 
-                    'content': 'I encountered an error. Please try again.'
-                })
-                yield f"data: {error_msg}\n\n"
+                yield f"data: {json.dumps(error_event(e))}\n\n"
             
         return Response(
             generate_stream(),

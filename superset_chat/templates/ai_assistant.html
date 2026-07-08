@@ -377,14 +377,30 @@ async function sendMessage(event) {
                             scrollChat();
                             break;
                         }
-                        case 'error':
+                        case 'error': {
+                            // Plain-language error recovery (#26): show a
+                            // categorized, non-technical message + next step,
+                            // never a stack trace.
                             if (!textRunDiv) {
                                 textRunDiv = document.createElement('div');
+                                textRunDiv.style.cssText =
+                                    'background:#fff4f4;border-left:4px solid #d9534f;' +
+                                    'padding:12px 14px;border-radius:8px;color:#721c24;';
                                 assistantContentDiv.appendChild(textRunDiv);
                             }
-                            textRunDiv.innerHTML = escapeHtml(data.content || '');
+                            const cat = data.category
+                                ? '<strong>[' + escapeHtml(data.category) + '] </strong>'
+                                : '';
+                            const msg = escapeHtml(data.message || data.content ||
+                                'Something went wrong while processing your request.');
+                            const ns = data.next_step
+                                ? '<div style="margin-top:8px;font-size:0.9em">Next: ' +
+                                  escapeHtml(data.next_step) + '</div>'
+                                : '';
+                            textRunDiv.innerHTML = '⚠️ ' + cat + msg + ns;
                             scrollChat();
                             break;
+                        }
                         case 'done':
                             // Structured events are rendered live as they arrive;
                             // nothing to regex-parse at done.
@@ -398,7 +414,8 @@ async function sendMessage(event) {
     } catch (error) {
         console.error('Error sending message:', error);
         hideTypingIndicator();
-        addMessage('Sorry, I encountered an error. Please try again.', 'assistant');
+        addMessage('⚠️ [connection] Couldn\'t reach the assistant. Please ' +
+            'check your connection and try again.', 'assistant');
     } finally {
         messageInput.disabled = false;
         sendBtn.disabled = false;
