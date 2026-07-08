@@ -64,5 +64,43 @@ Files: created gitignored `.env` (real values, NOT committed); updated
 (verified `.env` is gitignored; `superset/superset.env` is tracked and was
 left alone).
 
+## #19 investigation — in-tree mcp_service over streamable-http (2026-07-08)
+
+Per the #19 guardrails, confirmed whether `/home/mlfts/superset`'s in-tree
+mcp_service can be started and reached — WITHOUT modifying the Superset
+checkout (only `docker exec` into the existing `superset-superset-1` container).
+
+Findings (validated live):
+- The `superset mcp` CLI exists in the live container (`/app/.venv/bin/superset`).
+  `superset mcp run --host 0.0.0.0 --port 5008` starts the service; it registers
+  ~70 RBAC-protected tools.
+- **Transport: streamable-http (stateless) at `/mcp`** — confirmed in the boot
+  log ("Starting MCP server ... with transport 'streamable-http' (stateless) on
+  http://0.0.0.0:5008/mcp"). `GET /mcp` -> 405 (POST-only MCP protocol);
+  `/sse` -> 404 (no legacy SSE endpoint). Uvicorn on 0.0.0.0:5008.
+- Auth: JWT (FastMCP BearerAuthProvider) / API-key passthrough (needs
+  `FAB_API_KEY_ENABLED`, which is OFF on the real instance) / `MCP_DEV_USERNAME`
+  dev fallback (unset on the real instance). The endpoint is reachable without
+  a token (405 on GET); actual tool calls require a Bearer token
+  (`SUPERSET_API_KEY` after enabling FAB_API_KEY_ENABLED, or an MCP service JWT
+  in `MCP_TOKEN`).
+- **No checkout modification needed** → NOT blocked. The plugin-side integration
+  is additive: `TRANSPORT_TYPE=streamable_http` selects `http://{mcp_host}/mcp`
+  with `transport=streamable_http` and `Authorization: Bearer <SUPERSET_API_KEY
+  | MCP_TOKEN>`; `stdio` remains the default (unchanged), so the plugin works
+  exactly as before if streamable-http isn't set up. The legacy `sse` branch
+  (`/sse`) is kept for other SSE MCP servers but the in-tree mcp_service does
+  not serve it.
+- Caveat: the plugin's own `docker-compose.yaml` `mcp_service` service builds
+  from `apache/superset:4.1.1`, which may NOT ship the `superset mcp` CLI; the
+  real `/home/mlfts/superset` build does. Against the real instance, run
+  `superset mcp run` in the superset container (or point a service at the real
+  image).
+
+Verified: 11 behavioral checks (streamable_http -> /mcp + Bearer; SUPERSET_API_KEY
+preferred over MCP_TOKEN; MCP_SERVICE_URL override; sse -> /sse; stdio default +
+env intact; no-token -> empty headers); full suite 85 tests pass; `docker compose
+config` valid. Live reachability confirmed via `docker exec` probe.
+
 ## BLOCKED
 (none yet — log any credential/ambiguity blockers here with date and item #)
