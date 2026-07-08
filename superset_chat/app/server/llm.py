@@ -14,7 +14,10 @@ from ..databases.postgres import Database
 from ..models import ChatModel
 from ..utils.logger import Logger
 
+import atexit
+import json
 import os
+import threading
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from datetime import datetime
@@ -208,6 +211,91 @@ class LLMAgent:
         # yield ChatMessage.from_event({'event': 'done'})
 
 
+class _MCPClientsPool:
+    """App-lifetime pool for the Superset MCP server.
+
+    The stdio transport spawns a child subprocess (and the SSE transport opens
+    a persistent connection) when tools are fetched. Doing that on every chat
+    message is high-latency and leaks processes. This pool fetches the tools
+    once, keeps the client (and its subprocess) alive, and reuses the tool
+    objects across requests. A config change (transport/host/env) re-initializes
+    the pool under a lock.
+
+    A ``threading.Lock`` is used instead of ``asyncio.Lock`` because the plugin
+    creates a fresh event loop per request; a loop-bound asyncio lock would
+    break across requests.
+    """
+
+    def __init__(self):
+        self._client = None
+        self._tools = None
+        self._cached_sig = None
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _signature(mcps):
+        return json.dumps(mcps, sort_keys=True, default=str)
+
+    async def get_tools(self, mcps):
+        sig = self._signature(mcps)
+        if self._tools is not None and sig == self._cached_sig:
+            return self._tools
+        with self._lock:
+            # double-checked locking: another caller may have initialized
+            # while we waited for the lock.
+            if self._tools is not None and sig == self._cached_sig:
+                return self._tools
+            client = MultiServerMCPClient(mcps)
+            tools = await client.get_tools()
+            # Best-effort teardown of the previous client before replacing it.
+            await self._close_client(self._client)
+            self._client = client  # keep the subprocess alive
+            self._tools = tools
+            self._cached_sig = sig
+        return self._tools
+
+    @staticmethod
+    async def _close_client(client):
+        if client is None:
+            return
+        for meth in ('aclose', '__aexit__', 'close'):
+            fn = getattr(client, meth, None)
+            if not callable(fn):
+                continue
+            try:
+                res = fn(None, None, None) if meth == '__aexit__' else fn()
+                if hasattr(res, '__await__'):
+                    await res
+                return
+            except Exception as exc:  # pragma: no cover - best-effort teardown
+                Logger().get_logger().warning(
+                    "MCP client teardown %r raised %s", meth, exc)
+
+    async def close(self):
+        with self._lock:
+            client, self._client = self._client, None
+            self._tools = None
+            self._cached_sig = None
+        await self._close_client(client)
+
+
+_mcp_pool = _MCPClientsPool()
+
+
+def _sync_shutdown():
+    """Best-effort synchronous teardown at process exit."""
+    client = _mcp_pool._client
+    fn = getattr(client, 'close', None) if client is not None else None
+    if callable(fn):
+        try:
+            fn()
+        except Exception:
+            pass
+
+
+atexit.register(_sync_shutdown)
+
+
 def get_user_chat_config(session_id: str, username: str = None) -> dict:
     # Namespace the checkpointer thread_id by username so a user cannot
     # read/append to another user's conversation history by reusing their
@@ -266,8 +354,7 @@ async def get_stream_agent_responce(session_id, message,
         func=lambda x: datetime.now().isoformat(),
         description="Returns the current datetime",
     )
-    client = MultiServerMCPClient(mcps)
-    mcp_tools = await client.get_tools()
+    mcp_tools = await _mcp_pool.get_tools(mcps)
     tools = mcp_tools + [datetime_tool]
 
     dbt_prompt = '''Don't use this tool to receieve charts/dashboards/Superset/datasets/datasource metadata. This graph doesn't know anything about them. Find real database name from Superset MCP.
