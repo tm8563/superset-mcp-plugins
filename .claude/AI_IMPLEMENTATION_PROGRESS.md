@@ -4,11 +4,11 @@ Checkbox tracker for `.claude/ROADMAP.md`. The spec lives in
 `CLAUDE.md` (rules) and `.claude/ROADMAP.md` (items) — this file only
 records completion status. Read ROADMAP.md for what each numbered item is.
 
-## Closing summary — ALL THREE PHASES COMPLETE (2026-07-08)
+## Closing summary — ALL FOUR PHASES COMPLETE (2026-07-08)
 
-All 23 roadmap items are implemented, verified, committed, and pushed to
-`origin/roadmap/phase1-correctness` (HEAD `5c374c4`). The full test suite
-passes (118 tests; stdlib `unittest`, run with `python3 -m unittest discover
+All 29 roadmap items are implemented, verified, committed, and pushed to
+`origin/roadmap/phase1-correctness` (HEAD `7a6b32b`). The full test suite
+passes (154 tests; stdlib `unittest`, run with `python3 -m unittest discover
 -s tests`). Git is clean and in sync with origin (0 ahead / 0 behind). No
 items are blocked (`## BLOCKED` is empty).
 
@@ -29,6 +29,13 @@ items are blocked (`## BLOCKED` is empty).
   automatic fallback; robust Langfuse wiring (covers the Ollama path);
   ML anomaly-detection + forecasting tools; best-effort PDF/screenshot
   reporting via Superset's existing machinery (gap vs QuickSight documented).
+- **Phase 4 — User-friendly UX: 6/6** (#24–#29) — zero-setup capability
+  disclosure (derived from the real tool surface; replaced stale Airflow
+  welcome); context-aware dataset-grounded prompt suggestions (replaced stale
+  showExamples); plain-language categorized error recovery (no stack traces);
+  one-line tool-use summaries with raw payload behind expand; minimal-friction
+  onboarding smoke test (no topic/dataset training step) + README note; early
+  'thinking' streaming indicator so the UI never feels frozen.
 
 Config reconciliation with the real `/home/mlfts/superset` instance + the #19
 mcp_service investigation are logged below. Real-instance validation was
