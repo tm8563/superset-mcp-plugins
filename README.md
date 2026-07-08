@@ -54,6 +54,10 @@ SQLALCHEMY_DATABASE_URI=postgresql://user:password@host:port/database
 SUPERSET_API_URL=http://localhost:8088
 SUPERSET_USERNAME=admin
 SUPERSET_PASSWORD=admin
+# Preferred: a scoped FAB API key (requires FAB_API_KEY_ENABLED=True on the
+# Superset side). When set, the MCP server authenticates with this key
+# instead of the service-account login, honoring per-user RBAC.
+#SUPERSET_API_KEY=sst-your-api-key
 
 # MCP Configuration
 TRANSPORT_TYPE=stdio  # or 'sse'

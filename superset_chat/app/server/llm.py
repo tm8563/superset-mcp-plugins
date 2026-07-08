@@ -324,20 +324,28 @@ async def get_stream_agent_responce(session_id, message,
     mcp_host = os.environ.get('mcp_host', 'mcp_sse_server:8000')
     TRANSPORT_TYPE = os.environ.get('TRANSPORT_TYPE', 'stdio')
     if TRANSPORT_TYPE == 'stdio':
+        # Prefer an API key over the service-account username/password so the
+        # MCP server authenticates to a FAB_API_KEY_ENABLED Superset with a
+        # scoped, revocable key (honoring per-user RBAC) instead of a shared
+        # login that bypasses it. When SUPERSET_API_KEY is set, omit the
+        # username/password entirely; otherwise fall back to them.
+        api_key = os.getenv('SUPERSET_API_KEY')
+        superset_env = {
+            'SUPERSET_API_URL': os.getenv('SUPERSET_API_URL'),
+        }
+        if api_key:
+            superset_env['SUPERSET_API_KEY'] = api_key
+        else:
+            superset_env['SUPERSET_USERNAME'] = os.getenv('SUPERSET_USERNAME')
+            superset_env['SUPERSET_PASSWORD'] = os.getenv('SUPERSET_PASSWORD')
         mcps = {
                 "SupersetMCP":
                 {
                     'command': "python",
                     'args': ["-m", "superset_mcp_server.mcp_server"],
                     "transport": "stdio",
-                    'env': {k: v for k, v in {
-                        'SUPERSET_API_URL': os.getenv(
-                            'SUPERSET_API_URL'),
-                        'SUPERSET_USERNAME': os.getenv(
-                            'SUPERSET_USERNAME'),
-                        'SUPERSET_PASSWORD': os.getenv(
-                            'SUPERSET_PASSWORD'),
-                    }.items() if v is not None}
+                    'env': {k: v for k, v in superset_env.items()
+                            if v is not None}
                 }
             }
     elif TRANSPORT_TYPE == 'sse':
