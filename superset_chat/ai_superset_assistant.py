@@ -25,14 +25,50 @@ def _current_username():
     return 'anonymous'
 
 
-def admin_only(f):
-    """Decorator to restrict access to authenticated users."""
+def _allowed_roles():
+    """Return the set of permitted roles, or None when no allowlist is set.
+
+    ``AI_ASSISTANT_ALLOWED_ROLES`` is a comma-separated list of FAB role names.
+    When unset/empty, any authenticated user may use the assistant (preserves
+    the prior behavior for setups without configured roles).
+    """
+    raw = os.environ.get('AI_ASSISTANT_ALLOWED_ROLES', '').strip()
+    if not raw:
+        return None
+    return {role.strip() for role in raw.split(',') if role.strip()}
+
+
+def ai_assistant_only(f):
+    """Restrict access to the AI assistant.
+
+    Always requires an authenticated user (401 otherwise). When
+    ``AI_ASSISTANT_ALLOWED_ROLES`` is set, the user must additionally hold at
+    least one of those roles (403 otherwise). When it is unset, any
+    authenticated user is allowed.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user or not current_user.is_authenticated:
             return jsonify({"error": "Authentication required"}), 401
+        allowed = _allowed_roles()
+        if allowed is not None:
+            user_roles = {
+                getattr(role, 'name', role)
+                for role in getattr(current_user, 'roles', [])
+            }
+            if not (allowed & user_roles):
+                logger.warning(
+                    "User %r denied AI assistant access (has roles=%s; "
+                    "required one of=%s)",
+                    getattr(current_user, 'username', None),
+                    sorted(user_roles) or None, sorted(allowed),
+                )
+                return jsonify(
+                    {"error": "Access forbidden: insufficient role"}
+                ), 403
         return f(*args, **kwargs)
     return decorated_function
+
 
 def failure_tolerant(f):
     """Decorator for error handling."""
@@ -134,7 +170,7 @@ class AISupersetAssistantView(BaseView):
     template_folder = Path(__file__).parent / 'templates'
     
     @expose('/')
-    @admin_only
+    @ai_assistant_only
     @failure_tolerant
     def index(self):
         """Redirect to main assistant view."""
@@ -163,7 +199,7 @@ class AISupersetAssistantView(BaseView):
             logger.error(f"Error starting database setup: {e}")
     
     @expose('/assistant')
-    @admin_only
+    @ai_assistant_only
     @failure_tolerant
     def assistant(self):
         """Main AI Assistant interface with real chat functionality"""
@@ -503,7 +539,7 @@ class AISupersetAssistantView(BaseView):
             return f"Error loading AI Assistant: {e}", 500
     
     @expose('/api/new_session', methods=['POST'])
-    @admin_only
+    @ai_assistant_only
     @failure_tolerant
     def new_session(self):
         """Create a new chat session"""
@@ -515,7 +551,7 @@ class AISupersetAssistantView(BaseView):
         })
     
     @expose('/api/chat', methods=['POST'])
-    @admin_only
+    @ai_assistant_only
     @failure_tolerant
     def chat_api(self):
         """Handle chat messages with real AI"""
@@ -546,7 +582,7 @@ class AISupersetAssistantView(BaseView):
             return jsonify({'error': 'Failed to process message'}), 500
     
     @expose('/api/chat_stream', methods=['POST'])
-    @admin_only
+    @ai_assistant_only
     @failure_tolerant  
     def chat_stream_api(self):
         """Handle streaming chat messages with real AI"""
@@ -615,7 +651,7 @@ class AISupersetAssistantView(BaseView):
         )
     
     @expose('/api/clear_session', methods=['POST'])
-    @admin_only
+    @ai_assistant_only
     @failure_tolerant
     def clear_session(self):
         """Clear a chat session (only its owner may clear it)."""
