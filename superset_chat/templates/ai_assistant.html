@@ -98,15 +98,60 @@ function renderMarkdown(text) {
     return s;
 }
 
+// One-line human summaries for tool use (roadmap #27): the collapsed header
+// shows a friendly summary, not the raw tool name or a wall of JSON. The raw
+// name + full input/output remain behind the expand toggle.
+const TOOL_SUMMARIES = {
+    Datetime: 'Checking the time',
+    SemanticLayerMetadata: 'Reading dataset metadata',
+    ConfigureEmbedding: 'Configuring dashboard embedding',
+    GetEmbedding: 'Checking embedding config',
+    MintGuestToken: 'Minting a guest token',
+    BuildEmbedUrl: 'Building an embed URL',
+    RevokeGuestTokens: 'Revoking dashboard embedding',
+    ListReports: 'Listing scheduled reports',
+    GetReport: 'Fetching report details',
+    ExecuteReport: 'Triggering a report snapshot',
+    SubscribeReport: 'Subscribing to a report',
+    CreateReport: 'Creating a scheduled report',
+    ListRLS: 'Listing row-level security rules',
+    ListRoles: 'Listing roles',
+    ListTags: 'Listing tags',
+    GetTaggedObjects: 'Listing tagged objects',
+    DetectAnomalies: 'Detecting anomalies',
+    ForecastSeries: 'Forecasting a series',
+    TriggerDashboardScreenshot: 'Capturing a dashboard screenshot',
+    TriggerChartScreenshot: 'Capturing a chart screenshot',
+    ExportDashboardPdf: 'Exporting a dashboard as PDF',
+};
+
+function toolSummary(name, input) {
+    const base = TOOL_SUMMARIES[name] || ('Running ' + name);
+    let hint = '';
+    try {
+        const s = String(input || '').trim();
+        if (/^\d+$/.test(s)) {
+            hint = s;  // a bare dataset/dashboard id
+        } else {
+            const m = s.match(/"(?:dataset_id|dashboard_id|chart_id|report_id|pk)"\s*:\s*"?(\d+)/);
+            if (m) { hint = m[1]; }
+        }
+    } catch (e) { /* ignore */ }
+    return hint ? (base + ' (' + hint + ')…') : (base + '…');
+}
+
 function createToolBlock(name, input) {
     const wrap = document.createElement('div');
     wrap.className = 'code-block-container';
+    const summary = toolSummary(name, input);
     wrap.innerHTML =
         '<div class="code-block-header collapsed" data-toggle="code-block">' +
-            '<span>🔧 ' + escapeHtml(name) + '</span>' +
+            '<span>🔧 ' + escapeHtml(summary) + '</span>' +
             '<span class="toggle-icon">▼</span>' +
         '</div>' +
         '<div class="code-block-content">' +
+            '<div style="font-size:0.85em;color:#666;margin-bottom:6px">Tool: ' +
+                escapeHtml(name) + '</div>' +
             '<pre>' + escapeHtml(input) + '</pre>' +
             '<div class="tool-output"><strong>Tool Output:</strong>' +
                 '<pre class="tool-output-pre"></pre>' +
