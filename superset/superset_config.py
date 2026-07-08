@@ -16,7 +16,26 @@ FEATURE_FLAGS = {
 }
 
 ENABLE_PROXY_FIX = True
-SECRET_KEY = "YOUR_OWN_RANDOM_GENERATED_STRING"
+
+# SECRET_KEY — required in production; ephemeral fallback only in dev.
+# Never ship a hardcoded/placeholder secret. Set SUPERSET_SECRET_KEY to a
+# long, random, persistent value in production. In development
+# (SUPERSET_ENV=development or DEV_MODE set), an ephemeral key is generated
+# when unset so local dev still works (sessions won't survive a restart).
+_superset_secret = os.environ.get('SUPERSET_SECRET_KEY')
+if _superset_secret:
+    SECRET_KEY = _superset_secret
+elif os.environ.get('SUPERSET_ENV') == 'development' or os.environ.get('DEV_MODE'):
+    import secrets as _secrets
+    SECRET_KEY = _secrets.token_urlsafe(32)
+    logger.warning(
+        "SUPERSET_SECRET_KEY is unset in development mode; generated an "
+        "ephemeral SECRET_KEY. Set SUPERSET_SECRET_KEY explicitly — session "
+        "data will not survive a restart.")
+else:
+    raise RuntimeError(
+        "SUPERSET_SECRET_KEY is required in production. Set it to a long, "
+        "random, persistent value (do not commit it).")
 
 # WTF_CSRF_ENABLED = False
 TALISMAN_ENABLED = True
