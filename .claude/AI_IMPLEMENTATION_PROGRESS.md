@@ -22,7 +22,7 @@ records completion status. Read ROADMAP.md for what each numbered item is.
 - [x] 13
 - [x] 14
 - [x] 15
-- [ ] 16
+- [x] 16
 - [ ] 17
 - [ ] 18
 
