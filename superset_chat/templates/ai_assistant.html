@@ -382,6 +382,19 @@ async function sendMessage(event) {
                                     currentSessionId.substring(0, 8) + '...';
                             }
                             break;
+                        case 'thinking':
+                            // Early indicator (#29): show "Thinking…" in the
+                            // assistant bubble immediately so it isn't empty
+                            // while the agent warms up. The first chunk/tool
+                            // replaces this.
+                            if (!textRunDiv) {
+                                textRunDiv = document.createElement('div');
+                                textRunDiv.className = 'text-run';
+                                assistantContentDiv.appendChild(textRunDiv);
+                            }
+                            textRunDiv.innerHTML = '<em>Thinking…</em>';
+                            scrollChat();
+                            break;
                         case 'chunk':
                             if (data.content) {
                                 if (!textRunDiv) {

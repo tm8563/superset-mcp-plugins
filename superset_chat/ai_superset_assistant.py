@@ -130,13 +130,17 @@ class AIAssistantAgent:
             username = self.sessions[session_id].get('username', 'anonymous')
         
         try:
+            # Early indicator (#29): emit a 'thinking' event before any agent
+            # setup (MCP pool init, LLM warm-up) so the UI never feels frozen
+            # while waiting for the first token/tool-start.
+            yield {'type': 'thinking'}
             stream_generator = await get_stream_agent_responce(
                 session_id=session_id,
                 message=message,
                 md_uri=os.environ.get('SQLALCHEMY_DATABASE_URI'),
                 username=username
             )
-            
+
             async for chunk in stream_generator():
                 if chunk:
                     yield chunk

@@ -97,10 +97,13 @@ class TestResponseStreamError(unittest.TestCase):
                     out.append(ev)
                 return out
             evs = asyncio.run(collect())
-            self.assertEqual(len(evs), 1)
-            self.assertEqual(evs[0]['type'], 'error')
-            self.assertEqual(evs[0]['category'], 'llm_unreachable')
-            self.assertIn('next_step', evs[0])
+            # #29 emits an early 'thinking' event before the agent runs; the
+            # categorized error follows it.
+            self.assertEqual(evs[0]['type'], 'thinking')
+            errors = [e for e in evs if e.get('type') == 'error']
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0]['category'], 'llm_unreachable')
+            self.assertIn('next_step', errors[0])
         finally:
             view.get_stream_agent_responce = original
 
