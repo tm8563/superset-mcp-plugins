@@ -20,7 +20,12 @@ def _read_template():
 def _extract_js():
     src = _read_template()
     m = re.search(r'<script[^>]*>(.*)</script>', src, re.S)
-    return m.group(1)
+    body = m.group(1)
+    # Strip Jinja substitutions so node --check sees valid JS (e.g. the
+    # capabilities_json injection from roadmap #24).
+    body = re.sub(r'\{%.*?%\}', '', body, flags=re.S)
+    body = re.sub(r'\{\{.*?\}\}', '0', body, flags=re.S)
+    return body
 
 
 class TestTemplateJS(unittest.TestCase):

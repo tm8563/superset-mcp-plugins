@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 from superset_chat.app.server.llm import get_stream_agent_responce
+from superset_chat.app.server.capabilities import get_capabilities_json
 from superset_chat.app.databases.postgres import Database
 
 logger = logging.getLogger(__name__)
@@ -476,22 +477,23 @@ class AISupersetAssistantView(BaseView):
             <div class="chat-container">
                 <div class="chat-messages" id="chatMessages">
                     <div class="message assistant">
-                        <div>
+                        <div id="welcomePanel">
                             Hello! I'm your AI Superset Assistant 🚀<br><br>
                             What would you like to know about Apache Superset?
                         </div>
                         <div class="message-time">Just now</div>
                     </div>
                 </div>
-                
+
                 <div class="typing-indicator" id="typingIndicator">
                     AI is thinking...
                 </div>
-                
+
                 <div class="chat-input-container">
                     <div class="control-buttons">
                         <button class="control-btn" id="newChatBtn">New Chat</button>
                         <button class="control-btn" id="clearChatBtn">Clear Chat</button>
+                        <button class="control-btn" id="capabilitiesBtn">What can I ask?</button>
                     </div>
                     
                     <form class="chat-input-form" id="chatInputForm">
@@ -537,6 +539,7 @@ class AISupersetAssistantView(BaseView):
                 'ai_assistant.html',
                 content=assistant_content,
                 nonce=nonce,
+                capabilities_json=get_capabilities_json(),
                 title="AI Superset Assistant",
                 base_template="appbuilder/baselayout.html",
                 appbuilder=self.appbuilder
