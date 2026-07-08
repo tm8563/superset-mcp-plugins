@@ -66,6 +66,14 @@ plugin-root `.env`).
 - [x] 22
 - [x] 23
 
+## Phase 4 — User-friendly UX
+- [ ] 24
+- [ ] 25
+- [ ] 26
+- [ ] 27
+- [ ] 28
+- [ ] 29
+
 ## Config reconciliation (2026-07-08)
 
 Reconciled the plugin's config against the real `/home/mlfts/superset` dev
