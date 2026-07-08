@@ -90,6 +90,9 @@ OLLAMA_BASE_URL=http://localhost:11434
 #OLLAMA_BASE_URL=https://ollama.com
 #OLLAMA_API_KEY=oll-your_cloud_key
 #OLLAMA_MODEL=llama3.1
+# FALLBACK: if set, a connection failure against OLLAMA_BASE_URL is retried
+# once against this URL (e.g. cloud primary -> local fallback). (roadmap #20)
+#OLLAMA_FALLBACK_BASE_URL=http://localhost:11434
 
 # Optional: Graph Database for dbt
 GRAPH_DB=neo4j  # or 'falkordb'
