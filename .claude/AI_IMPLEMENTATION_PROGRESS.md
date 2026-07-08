@@ -17,7 +17,7 @@ records completion status. Read ROADMAP.md for what each numbered item is.
 - [x] 10
 
 ## Phase 2 — QuickSight parity features
-- [ ] 11
+- [x] 11
 - [ ] 12
 - [ ] 13
 - [ ] 14

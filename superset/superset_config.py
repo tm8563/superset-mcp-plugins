@@ -61,7 +61,8 @@ def init_custom_views(app):
             AISupersetAssistantView,
             "AI Superset Assistant",
             icon="fa-robot",
-            category="Custom Tools"
+            category="AI",
+            category_icon="fa-robot",
         )
         
         logger.info("✅ Functional AI Superset Assistant plugin registered successfully!")

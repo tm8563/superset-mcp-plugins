@@ -122,7 +122,8 @@ def init_custom_views(app):
             AISupersetAssistantView,
             "AI Superset Assistant",
             icon="fa-robot",
-            category="Custom Tools"
+            category="AI",
+            category_icon="fa-robot",
         )
 
         logger.info("✅ AI Superset Assistant plugin registered successfully!")
@@ -221,7 +222,7 @@ This will start:
 2. Log in with credentials:
    - Username: `superset_admin`
    - Password: `superset` (or value from `ADMIN_PASSWORD` env var)
-3. Look for **"Custom Tools"** in the top navigation menu
+3. Look for **"AI"** in the top navigation menu
 4. Click on **"AI Superset Assistant"** (with robot icon)
 5. Start chatting with your AI assistant
 
