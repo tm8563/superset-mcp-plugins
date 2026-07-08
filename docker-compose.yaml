@@ -25,6 +25,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8088/health', timeout=5).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
 
 
   superset-importer:
@@ -53,8 +59,8 @@ services:
       POSTGRES_PASSWORD: postgres
       PGDATA: /var/lib/postgresql/data/db-files/
       POSTGRES_MULTIPLE_DATABASES: superset,postgres
-    # volumes:
-    #   - ./pgdata:/var/lib/postgresql/data/db-files
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data/db-files
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres"]
       interval: 5s
@@ -63,14 +69,19 @@ services:
   falkordb:
     container_name: falkordb
     image: falkordb/falkordb:latest
-    # volumes:
-    #   - ./falkordb_data:/var/lib/falkordb/data
+    volumes:
+      - ./falkordb_data:/var/lib/falkordb/data
     ports:
       - 3000:3000
       - 6379:6379
     restart: always
     networks:
       data-lake-network:
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -h localhost -p 6379 ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   educational-dbt-docs:
     container_name: educational-dbt-docs
@@ -82,11 +93,18 @@ services:
     volumes:
       - ./DbtEducationalDataProject:/usr/app/dbt
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - data-lake-network
     environment:
       - DBT_PROFILES_DIR=/usr/app/dbt
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:80/', timeout=5).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
 
   dbt-graph-loader:
     container_name: dbt-graph-loader
@@ -96,7 +114,10 @@ services:
     volumes:
       - ./DbtEducationalDataProject:/dbt
     depends_on:
-      - falkordb
+      falkordb:
+        condition: service_healthy
+      educational-dbt-docs:
+        condition: service_healthy
     networks:
       - data-lake-network
     environment:
