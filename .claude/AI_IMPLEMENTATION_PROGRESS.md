@@ -71,7 +71,7 @@ plugin-root `.env`).
 - [x] 25
 - [x] 26
 - [x] 27
-- [ ] 28
+- [x] 28
 - [ ] 29
 
 ## Config reconciliation (2026-07-08)

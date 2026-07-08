@@ -247,6 +247,29 @@ Once in the chat interface, try these queries:
 - "How many charts are in the analytics dashboard?"
 - "What datasources are connected to Superset?"
 
+### Zero-setup onboarding (no topic/dataset training step)
+
+A fresh user can get a grounded answer with **zero prior configuration** —
+there is no separate "topic" or "dataset training" step (the QuickSight Q
+curation gate is deliberately avoided):
+
+1. **Open the assistant** — the welcome lists the real capabilities (NLQ,
+   dashboards, alerts, governance, embedding, PDF, ML) derived from the
+   agent's tool surface. Nothing to set up.
+2. **Pick a dataset** from the dropdown above the input. 3-4 clickable example
+   questions appear, grounded in that dataset's actual columns/metrics and the
+   auto-populated Q-style metadata sidecar (synonyms, friendly name, primary
+   date field). The sidecar is auto-derived from the dataset's `extra` field
+   (see roadmap #13) — no manual curation.
+3. **Click a suggestion** (or type your own question) and send. The assistant
+   grounds the question in the dataset's semantic context, generates SQL via
+   structured output, runs it, and streams back a plain-English answer with
+   lightweight, collapsible tool-use indicators.
+
+The full path (capabilities → dataset-grounded suggestions → grounded NLQ
+answer) is covered by `tests/test_onboarding_smoke.py`, which asserts no
+training/curation step is required or mentioned anywhere.
+
 ### API Endpoints
 
 The plugin provides the following REST endpoints. The route prefix
