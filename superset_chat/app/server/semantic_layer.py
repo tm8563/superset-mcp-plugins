@@ -135,6 +135,23 @@ class SupersetRestClient:
         response.raise_for_status()
         return response.json()
 
+    def post(self, path: str, json_body: dict = None) -> dict:
+        if not self._api_key and self._token is None:
+            self._login()
+        url = path if path.startswith('http') else f'{self._base}{path}'
+        response = httpx.post(url, headers=self._headers(), json=json_body,
+                              timeout=15)
+        response.raise_for_status()
+        return response.json()
+
+    def delete(self, path: str) -> dict:
+        if not self._api_key and self._token is None:
+            self._login()
+        url = path if path.startswith('http') else f'{self._base}{path}'
+        response = httpx.delete(url, headers=self._headers(), timeout=15)
+        response.raise_for_status()
+        return response.json()
+
 
 def get_semantic_sidecar(client: SupersetRestClient, dataset_id) -> SemanticSidecar:
     """Read the Q-style sidecar from a dataset's `extra` field."""
