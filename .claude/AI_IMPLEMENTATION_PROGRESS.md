@@ -68,7 +68,7 @@ plugin-root `.env`).
 
 ## Phase 4 — User-friendly UX
 - [x] 24
-- [ ] 25
+- [x] 25
 - [ ] 26
 - [ ] 27
 - [ ] 28

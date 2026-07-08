@@ -14,6 +14,8 @@ from pathlib import Path
 
 from superset_chat.app.server.llm import get_stream_agent_responce
 from superset_chat.app.server.capabilities import get_capabilities_json
+from superset_chat.app.server.suggestions import suggest_questions
+from superset_chat.app.server.semantic_layer import SupersetRestClient
 from superset_chat.app.databases.postgres import Database
 
 logger = logging.getLogger(__name__)
@@ -420,6 +422,36 @@ class AISupersetAssistantView(BaseView):
                 gap: 10px;
                 margin-bottom: 15px;
             }
+            .context-bar {
+                margin-bottom: 12px;
+            }
+            #datasetPicker {
+                width: 100%;
+                padding: 8px 10px;
+                border: 2px solid #e0e0e0;
+                border-radius: 8px;
+                font-size: 0.9rem;
+                margin-bottom: 10px;
+                background: white;
+            }
+            .suggestion-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .suggestion-chip {
+                background: #eef6ff;
+                color: #0b5cad;
+                border: 1px solid #b9d6f5;
+                padding: 6px 12px;
+                border-radius: 16px;
+                font-size: 0.85rem;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+            .suggestion-chip:hover {
+                background: #d8ebff;
+            }
             .control-btn {
                 background: #17a2b8;
                 color: white;
@@ -495,7 +527,14 @@ class AISupersetAssistantView(BaseView):
                         <button class="control-btn" id="clearChatBtn">Clear Chat</button>
                         <button class="control-btn" id="capabilitiesBtn">What can I ask?</button>
                     </div>
-                    
+
+                    <div class="context-bar">
+                        <select id="datasetPicker" title="Pick a dataset to ground suggestions">
+                            <option value="">Select a dataset for tailored suggestions…</option>
+                        </select>
+                        <div id="suggestionRow" class="suggestion-row"></div>
+                    </div>
+
                     <form class="chat-input-form" id="chatInputForm">
                         <input 
                             type="text" 
@@ -688,3 +727,32 @@ class AISupersetAssistantView(BaseView):
             return jsonify({'message': 'Session cleared successfully'})
 
         return jsonify({'error': 'Session not found'}), 404
+
+    @expose('/api/datasets', methods=['GET'])
+    @ai_assistant_only
+    @failure_tolerant
+    def datasets_api(self):
+        """List available datasets (id + name) for the context picker (#25)."""
+        data = SupersetRestClient().get('/api/v1/dataset/')
+        result = data.get('result', []) or []
+        datasets = [{'id': d.get('id'),
+                     'name': d.get('table_name') or d.get('name')}
+                    for d in result if d.get('id')]
+        return jsonify({'datasets': datasets})
+
+    @expose('/api/suggestions', methods=['GET'])
+    @ai_assistant_only
+    @failure_tolerant
+    def suggestions_api(self):
+        """Return 3-4 dataset-grounded example questions (#25)."""
+        dataset_id = request.args.get('dataset_id')
+        if not dataset_id:
+            return jsonify({'error': 'dataset_id is required'}), 400
+        try:
+            questions = suggest_questions(SupersetRestClient(), dataset_id)
+        except Exception as exc:
+            logger.warning('Failed to build suggestions for dataset %s: %s',
+                           dataset_id, exc)
+            return jsonify({'error': 'Could not load suggestions for that '
+                                     'dataset.', 'questions': []}), 200
+        return jsonify({'dataset_id': dataset_id, 'questions': questions})

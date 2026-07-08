@@ -137,7 +137,74 @@ document.addEventListener('DOMContentLoaded', function() {
             addAssistantHtml(renderCapabilityPanel());
         });
     }
+    loadDatasets();
 });
+
+// Context-aware prompt suggestions (roadmap #25): dataset-grounded example
+// questions derived from the dataset's real columns/metrics + #13 sidecar.
+function authHeaders() {
+    const h = {'Content-Type': 'application/json'};
+    if (csrfToken) { h['X-CSRFToken'] = csrfToken; }
+    return h;
+}
+
+async function loadDatasets() {
+    const picker = document.getElementById('datasetPicker');
+    if (!picker) { return; }
+    try {
+        const resp = await fetch('/aisupersetassistantview/api/datasets', {headers: authHeaders()});
+        if (!resp.ok) { return; }
+        const data = await resp.json();
+        (data.datasets || []).forEach(function (d) {
+            const opt = document.createElement('option');
+            opt.value = d.id;
+            opt.textContent = d.name;
+            picker.appendChild(opt);
+        });
+    } catch (e) { console.error('Error loading datasets:', e); }
+    picker.addEventListener('change', function () {
+        if (picker.value) { loadSuggestions(picker.value); }
+        else { document.getElementById('suggestionRow').innerHTML = ''; }
+    });
+    // Pre-select from ?dataset_id= URL param.
+    const pre = new URLSearchParams(window.location.search).get('dataset_id');
+    if (pre && picker.querySelector('option[value="' + pre + '"]')) {
+        picker.value = pre;
+        loadSuggestions(pre);
+    }
+}
+
+async function loadSuggestions(datasetId) {
+    const row = document.getElementById('suggestionRow');
+    if (!row) { return; }
+    row.innerHTML = '<span style="color:#888;font-size:0.85em">Loading suggestions…</span>';
+    try {
+        const resp = await fetch(
+            '/aisupersetassistantview/api/suggestions?dataset_id=' + encodeURIComponent(datasetId),
+            {headers: authHeaders()});
+        const data = await resp.json();
+        const questions = data.questions || [];
+        if (!questions.length) {
+            row.innerHTML = '<span style="color:#888;font-size:0.85em">No suggestions for this dataset.</span>';
+            return;
+        }
+        row.innerHTML = '';
+        questions.forEach(function (q) {
+            const chip = document.createElement('span');
+            chip.className = 'suggestion-chip';
+            chip.textContent = q;
+            chip.addEventListener('click', function () {
+                const input = document.getElementById('messageInput');
+                input.value = q;
+                input.focus();
+            });
+            row.appendChild(chip);
+        });
+    } catch (e) {
+        console.error('Error loading suggestions:', e);
+        row.innerHTML = '';
+    }
+}
 
 async function initializeCSRF() {
     try {
@@ -381,20 +448,8 @@ function clearChatDisplay() {
     messagesContainer.innerHTML = '';
 }
 
-function showExamples() {
-    const examples = [
-        "How do I create a simple DAG?",
-        "Help me debug a failing task",
-        "What are DAG best practices?",
-        "How can I optimize my workflow performance?",
-        "Show me sensor examples"
-    ];
-    
-    const messageInput = document.getElementById('messageInput');
-    const randomExample = examples[Math.floor(Math.random() * examples.length)];
-    messageInput.value = randomExample;
-    messageInput.focus();
-}
+// showExamples() removed (roadmap #25): replaced by context-aware suggestions
+// from loadSuggestions(), grounded in the selected dataset's columns/metrics.
 
 document.getElementById('messageInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
