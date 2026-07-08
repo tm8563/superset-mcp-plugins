@@ -342,15 +342,28 @@ def get_user_chat_config(session_id: str, username: str = None) -> dict:
     thread_id = f"{username}:{session_id}" if username else session_id
     chat_config = {'configurable': {'thread_id': thread_id},
                    "recursion_limit": 100}
-    if LANGFUSE_AVAILABLE and os.environ.get('LANGFUSE_HOST'):
-        langfuse_handler = CallbackHandler(
+    # Langfuse observability — provider-agnostic, so it covers every LLM
+    # backend including Ollama (and the Ollama cloud->local fallback, whose
+    # LLM call is traced via the run_manager propagated through the override).
+    # Require all three env vars so a partial config doesn't pass None keys to
+    # the handler (roadmap #21).
+    langfuse_host = os.environ.get('LANGFUSE_HOST')
+    langfuse_pk = os.environ.get('LANGFUSE_PUBLIC_KEY')
+    langfuse_sk = os.environ.get('LANGFUSE_SECRET_KEY')
+    if LANGFUSE_AVAILABLE and langfuse_host:
+        if not (langfuse_pk and langfuse_sk):
+            Logger().get_logger().warning(
+                'LANGFUSE_HOST is set but LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY'
+                ' are missing; Langfuse tracing disabled.')
+        else:
+            langfuse_handler = CallbackHandler(
                 user_id=username if username else session_id,
                 session_id=f"{session_id}",
-                public_key=os.environ.get('LANGFUSE_PUBLIC_KEY'),
-                secret_key=os.environ.get('LANGFUSE_SECRET_KEY'),
-                host=os.environ.get('LANGFUSE_HOST')
+                public_key=langfuse_pk,
+                secret_key=langfuse_sk,
+                host=langfuse_host,
             )
-        chat_config['callbacks'] = [langfuse_handler]
+            chat_config['callbacks'] = [langfuse_handler]
     return chat_config
 
 
