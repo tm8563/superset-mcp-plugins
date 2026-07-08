@@ -51,51 +51,6 @@ function escapeHtml(s) {
 }
 
 function renderMarkdown(text) {
-    // Escape first, then apply a small markdown subset. Tool blocks are
-    // rendered separately from structured events (roadmap #17), so there are
-    // no "Start Running Tool:" / "Tool Output:" text blocks to regex-parse.
-    let s = escapeHtml(text);
-    s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-         .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-         .replace(/`([^`]+)`/g, '<code>$1</code>')
-         .replace(/\n/g, '<br>');
-    return s;
-}
-
-function scrollChatToBottom() {
-    const c = document.getElementById('chatMessages');
-    c.scrollTop = c.scrollHeight;
-}
-
-function createToolBlock(name, input) {
-    const wrap = document.createElement('div');
-    wrap.className = 'code-block-container';
-    wrap.innerHTML =
-        '<div class="code-block-header collapsed" data-toggle="code-block">' +
-            '<span>\u{1F527} ' + escapeHtml(name) + '</span>' +
-            '<span class="toggle-icon">\u25BC</span>' +
-        '</div>' +
-        '<div class="code-block-content">' +
-            '<pre>' + escapeHtml(input) + '</pre>' +
-            '<div class="tool-output"><strong>Tool Output:</strong>' +
-                '<pre class="tool-output-pre"></pre>' +
-            '</div>' +
-        '</div>';
-    const header = wrap.querySelector('.code-block-header');
-    header.style.cursor = 'pointer';
-    header.addEventListener('click', function () { toggleCodeBlock(this); });
-    return { wrap: wrap, outputPre: wrap.querySelector('.tool-output-pre') };
-}
-
-
-
-function escapeHtml(s) {
-    return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-function renderMarkdown(text) {
     // Tool blocks are rendered separately as structured events (roadmap #17);
     // this handles only inline markdown over escaped text.
     let s = escapeHtml(text);
@@ -281,7 +236,7 @@ async function sendMessage(event) {
                                 }
                                 textBuffer += data.content;
                                 textRunDiv.innerHTML = renderMarkdown(textBuffer);
-                                scrollChatToBottom();
+                                scrollChat();
                             }
                             break;
                         case 'tool_start': {
@@ -294,7 +249,7 @@ async function sendMessage(event) {
                                 name: data.name,
                                 outputPre: tb.outputPre
                             });
-                            scrollChatToBottom();
+                            scrollChat();
                             break;
                         }
                         case 'tool_end': {
@@ -308,7 +263,7 @@ async function sendMessage(event) {
                                 target.outputPre.textContent =
                                     data.output == null ? '' : String(data.output);
                             }
-                            scrollChatToBottom();
+                            scrollChat();
                             break;
                         }
                         case 'error':
@@ -317,11 +272,11 @@ async function sendMessage(event) {
                                 assistantContentDiv.appendChild(textRunDiv);
                             }
                             textRunDiv.innerHTML = escapeHtml(data.content || '');
-                            scrollChatToBottom();
+                            scrollChat();
                             break;
                         case 'done':
                             // Structured events are rendered live as they arrive;
-                            // no "Start Running Tool:"/"Tool Output:" regex to run.
+                            // nothing to regex-parse at done.
                             break;
                     }
                 } catch (e) {
